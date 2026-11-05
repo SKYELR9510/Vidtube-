@@ -104,7 +104,7 @@ class DownloadService : Service() {
 
         val parts = streams.mapIndexed { i, s ->
             val f = File(dir, "${task.id}_$i.part")
-            fetch(s, f, sizes[i]) { written ->
+            fetch(s, f, sizes[i], job.tvClient) { written ->
                 val p = ((doneBefore + written).toFloat() / total).coerceIn(0f, 1f)
                 Downloads.update(task.id) { it.copy(progress = p) }
                 nm.notify(NOTIF_ID, notification(task.title, (p * 100).toInt(), false))
@@ -141,7 +141,13 @@ class DownloadService : Service() {
      * Descarga un stream de YouTube por partes (como el reproductor), para evitar que
      * YouTube limite la velocidad.
      */
-    private suspend fun fetch(stream: Stream, file: File, contentLength: Long, onProgress: (Long) -> Unit) {
+    private suspend fun fetch(
+        stream: Stream,
+        file: File,
+        contentLength: Long,
+        tvClient: Boolean,
+        onProgress: (Long) -> Unit,
+    ) {
         val client = DownloaderImpl.getInstance().client
         val base = stream.content
         val isWeb = YoutubeParsingHelper.isWebStreamingUrl(base)
@@ -152,9 +158,16 @@ class DownloadService : Service() {
             while (contentLength <= 0 || pos < contentLength) {
                 currentCoroutineContext().ensureActive()
                 val end = if (contentLength > 0) minOf(pos + CHUNK - 1, contentLength - 1) else pos + CHUNK - 1
-                val url = "$base&range=$pos-$end&rn=${rn++}"
-                val req = Request.Builder()
-                    .url(url)
+                val req = if (tvClient) {
+                    // Videos de niños (plan B Smart TV): pedido normal por rangos
+                    Request.Builder()
+                        .url(base)
+                        .header("User-Agent", com.silva.vidtube.data.KidsFallback.TV_USER_AGENT)
+                        .header("Range", "bytes=$pos-$end")
+                        .header("Accept-Encoding", "identity")
+                        .build()
+                } else Request.Builder()
+                    .url("$base&range=$pos-$end&rn=${rn++}")
                     .post(byteArrayOf(0x78, 0).toRequestBody())
                     .header("User-Agent", DownloaderImpl.USER_AGENT)
                     .header("Accept-Encoding", "identity")

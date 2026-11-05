@@ -91,7 +91,21 @@ object Repository {
 
     // ---------- Video ----------
     suspend fun stream(url: String): StreamInfo = withContext(Dispatchers.IO) {
-        StreamInfo.getInfo(yt, url)
+        try {
+            StreamInfo.getInfo(yt, url)
+        } catch (e: Exception) {
+            // Videos "hechos para niños": YouTube los bloquea al cliente normal; probamos el plan B
+            if (KidsFallback.applies(e)) {
+                try {
+                    KidsFallback.load(url)
+                } catch (fallback: Exception) {
+                    android.util.Log.w("Vidtube", "Plan B para videos de niños falló", fallback)
+                    throw e
+                }
+            } else {
+                throw e
+            }
+        }
     }
 
     suspend fun comments(url: String): Pair<List<Comment>, Int> = withContext(Dispatchers.IO) {

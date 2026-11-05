@@ -74,6 +74,9 @@ object PlayerHolder {
     private val ytProgressive = YoutubeHttpDataSource.Factory()
         .setRangeParameterEnabled(false)
         .setRnParameterEnabled(true)
+    private val tvSource = com.google.android.exoplayer2.upstream.DefaultHttpDataSource.Factory()
+        .setUserAgent(com.silva.vidtube.data.KidsFallback.TV_USER_AGENT)
+        .setAllowCrossProtocolRedirects(true)
     private val ytHls = YoutubeHttpDataSource.Factory()
         .setRangeParameterEnabled(false)
         .setRnParameterEnabled(false)
@@ -198,6 +201,11 @@ object PlayerHolder {
             .setUri(Uri.parse(stream.content))
             .setCustomCacheKey(info.id + ":" + stream.id)
             .build()
+
+        // Videos de niños cargados como Smart TV: se piden con el "navegador" de la TV
+        if (com.silva.vidtube.data.KidsFallback.isTvStream(info.id)) {
+            return ProgressiveMediaSource.Factory(tvSource).createMediaSource(item)
+        }
 
         val isAdaptive = (stream is VideoStream && stream.isVideoOnly) || stream is AudioStream
         val itag = stream.itagItem

@@ -65,7 +65,13 @@ data class DownloadTask(
 }
 
 /** Trabajo pendiente con los streams elegidos (no se guarda en disco). */
-class DownloadJob(val taskId: String, val option: DownloadOption, val durationSec: Long)
+class DownloadJob(
+    val taskId: String,
+    val option: DownloadOption,
+    val durationSec: Long,
+    /** true si el video se cargó con el plan B de Smart TV (videos de niños). */
+    val tvClient: Boolean = false,
+)
 
 object Downloads {
     private lateinit var prefs: SharedPreferences
@@ -158,7 +164,9 @@ object Downloads {
             status = DownloadStatus.QUEUED,
         )
         _tasks.value = listOf(task) + _tasks.value
-        synchronized(queue) { queue.addLast(DownloadJob(id, option, info.duration)) }
+        synchronized(queue) { queue.addLast(
+            DownloadJob(id, option, info.duration, com.silva.vidtube.data.KidsFallback.isTvStream(info.id))
+        ) }
         ContextCompat.startForegroundService(context, Intent(context, DownloadService::class.java))
     }
 
