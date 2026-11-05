@@ -69,9 +69,10 @@ object KidsFallback {
             )
         }.onFailure { Log.w(TAG, "Sin visitorData", it) }.getOrNull()
 
-        val sts = runCatching { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId) }
-            .onFailure { Log.w(TAG, "Sin signatureTimestamp", it) }
-            .getOrNull()
+        val sts = JsSolver.signatureTimestamp()
+            ?: runCatching { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId) }
+                .onFailure { Log.w(TAG, "Sin signatureTimestamp", it) }
+                .getOrNull()
 
         val body = JSONObject()
             .put(
@@ -166,18 +167,61 @@ object KidsFallback {
 
         var firstError: String? = null
         var unsupported = 0
+
+        // 1) Separar la URL base, la firma cifrada y el parámetro "n" de cada formato
+        data class Raw(val f: JSONObject, val base: String, val s: String?, val sp: String, val n: String?)
+        val raws = ArrayList<Raw>()
         for (f in all) {
-            val itag = f.optInt("itag")
-            if (!ItagItem.isSupported(itag)) {
+            if (!ItagItem.isSupported(f.optInt("itag"))) {
                 unsupported++
                 continue
             }
-            val streamUrl = runCatching { resolveUrl(videoId, f) }
-                .onFailure {
-                    Log.w(TAG, "No se pudo descifrar itag $itag", it)
-                    if (firstError == null) firstError = "${it.javaClass.simpleName}: ${it.message}".take(160)
+            var base = f.optString("url")
+            var sig: String? = null
+            var sp = "signature"
+            if (base.isBlank()) {
+                val cipher = f.optString("signatureCipher").ifBlank { f.optString("cipher") }
+                if (cipher.isBlank()) continue
+                val params = cipher.split("&").associate {
+                    it.substringBefore("=") to java.net.URLDecoder.decode(it.substringAfter("=", ""), "UTF-8")
                 }
-                .getOrNull() ?: continue
+                base = params["url"] ?: continue
+                sig = params["s"]
+                sp = params["sp"] ?: "signature"
+            }
+            val n = android.net.Uri.parse(base).getQueryParameter("n")
+            raws += Raw(f, base, sig, sp, n)
+        }
+
+        // 2) Resolver todos los desafíos de una vez con el reproductor de YouTube
+        val (sigMap, nMap) = try {
+            JsSolver.solve(
+                com.silva.vidtube.VidtubeApp.instance,
+                raws.mapNotNull { it.s },
+                raws.mapNotNull { it.n },
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Solucionador falló", e)
+            firstError = "${e.javaClass.simpleName}: ${e.message}".take(160)
+            emptyMap<String, String>() to emptyMap()
+        }
+
+        // 3) Armar las URLs finales y los streams
+        for (r in raws) {
+            val f = r.f
+            val itag = f.optInt("itag")
+            var streamUrl = r.base
+            if (r.s != null) {
+                val solved = sigMap[r.s]
+                if (solved == null) {
+                    if (firstError == null) firstError = "Firma sin resolver"
+                    continue
+                }
+                streamUrl += "&${r.sp}=" + java.net.URLEncoder.encode(solved, "UTF-8")
+            }
+            if (r.n != null) {
+                nMap[r.n]?.let { streamUrl = replaceParam(streamUrl, "n", it) }
+            }
             val item = runCatching { ItagItem(ItagItem.getItag(itag)) }.getOrNull() ?: continue
             fillItag(item, f, duration)
             val mime = f.optString("mimeType")
@@ -228,30 +272,8 @@ object KidsFallback {
         return info
     }
 
-    /** URL directa del formato: descifra la firma y el parámetro "n" anti-estrangulamiento. */
-    private fun resolveUrl(videoId: String, f: JSONObject): String {
-        var url = f.optString("url")
-        if (url.isBlank()) {
-            val cipher = f.optString("signatureCipher").ifBlank { f.optString("cipher") }
-            if (cipher.isBlank()) error("sin url")
-            val params = cipher.split("&").associate {
-                val k = it.substringBefore("=")
-                k to java.net.URLDecoder.decode(it.substringAfter("=", ""), "UTF-8")
-            }
-            val base = params["url"] ?: error("cipher sin url")
-            val s = params["s"] ?: error("cipher sin firma")
-            val sp = params["sp"] ?: "signature"
-            url = "$base&$sp=" + java.net.URLEncoder.encode(
-                YoutubeJavaScriptPlayerManager.deobfuscateSignature(videoId, s), "UTF-8"
-            )
-        }
-        return try {
-            YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(videoId, url)
-        } catch (e: Exception) {
-            Log.w(TAG, "No se pudo descifrar el parámetro n; uso la URL tal cual", e)
-            url
-        }
-    }
+    private fun replaceParam(url: String, key: String, value: String): String =
+        url.replace(Regex("([?&])$key=[^&]*"), "$1$key=" + java.net.URLEncoder.encode(value, "UTF-8"))
 
     private fun fillItag(item: ItagItem, f: JSONObject, durationSec: Long) {
         f.optString("contentLength").toLongOrNull()?.let { item.contentLength = it }

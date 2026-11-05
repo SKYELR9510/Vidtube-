@@ -1,0 +1,5 @@
+Solucionador de desafíos JavaScript de YouTube, tomado de https://github.com/yt-dlp/ejs
+(releases/latest: yt.solver.lib.min.js y yt.solver.core.min.js).
+Licencias: ejs = Unlicense; meriyah = ISC; astring = MIT (ver cabeceras de los archivos).
+Si YouTube cambia su reproductor y el plan B de videos de niños deja de funcionar,
+reemplaza estos dos archivos por la última versión del repositorio yt-dlp/ejs.
