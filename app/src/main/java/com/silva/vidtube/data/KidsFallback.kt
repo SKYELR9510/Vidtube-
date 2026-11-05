@@ -8,7 +8,9 @@ import org.schabi.newpipe.extractor.MediaFormat
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException
+import org.schabi.newpipe.extractor.services.youtube.InnertubeClientRequestInfo
 import org.schabi.newpipe.extractor.services.youtube.ItagItem
+import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import org.schabi.newpipe.extractor.services.youtube.YoutubeJavaScriptPlayerManager
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.DeliveryMethod
@@ -57,6 +59,16 @@ object KidsFallback {
         val loc = NewPipe.getPreferredLocalization()
         val country = NewPipe.getPreferredContentCountry()
 
+        // Identificador de visitante (como hace yt-dlp): sin él YouTube a veces rechaza la TV
+        val visitorData = runCatching {
+            val web = InnertubeClientRequestInfo.ofWebClient()
+            web.clientInfo.clientVersion = YoutubeParsingHelper.getClientVersion()
+            YoutubeParsingHelper.getVisitorDataFromInnertube(
+                web, loc, country, YoutubeParsingHelper.getYouTubeHeaders(),
+                YoutubeParsingHelper.YOUTUBEI_V1_URL, null, false,
+            )
+        }.onFailure { Log.w(TAG, "Sin visitorData", it) }.getOrNull()
+
         val sts = runCatching { YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId) }
             .onFailure { Log.w(TAG, "Sin signatureTimestamp", it) }
             .getOrNull()
@@ -76,6 +88,7 @@ object KidsFallback {
                         .put("osVersion", "2.4.0")
                         .put("hl", loc.localizationCode)
                         .put("gl", country.countryCode)
+                        .apply { if (visitorData != null) put("visitorData", visitorData) }
                 )
             )
             .put("videoId", videoId)
@@ -85,24 +98,33 @@ object KidsFallback {
                 if (sts != null) {
                     put(
                         "playbackContext",
-                        JSONObject().put("contentPlaybackContext", JSONObject().put("signatureTimestamp", sts))
+                        JSONObject().put(
+                            "contentPlaybackContext",
+                            JSONObject()
+                                .put("html5Preference", "HTML5_PREF_WANTS")
+                                .put("signatureTimestamp", sts)
+                        )
                     )
                 }
             }
 
-        val headers = mapOf(
+        val headers = mutableMapOf(
             "User-Agent" to listOf(TV_USER_AGENT),
             "Content-Type" to listOf("application/json"),
             "Origin" to listOf("https://www.youtube.com"),
             "X-YouTube-Client-Name" to listOf(CLIENT_ID),
             "X-YouTube-Client-Version" to listOf(CLIENT_VERSION),
         )
+        if (visitorData != null) headers["X-Goog-Visitor-Id"] = listOf(visitorData)
         val resp = DownloaderImpl.getInstance().post(
             "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
             headers,
             body.toString().toByteArray(),
         )
-        val json = JSONObject(resp.responseBody() ?: throw ContentNotAvailableException("Respuesta vacía"))
+        if (resp.responseCode() != 200) {
+            throw ContentNotAvailableException("Plan B (TV): YouTube respondió HTTP ${resp.responseCode()}")
+        }
+        val json = JSONObject(resp.responseBody() ?: throw ContentNotAvailableException("Plan B (TV): respuesta vacía"))
 
         val playability = json.optJSONObject("playabilityStatus")
         val status = playability?.optString("status").orEmpty()

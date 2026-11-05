@@ -15,6 +15,7 @@ import org.schabi.newpipe.extractor.channel.tabs.ChannelTabInfo
 import org.schabi.newpipe.extractor.channel.tabs.ChannelTabs
 import org.schabi.newpipe.extractor.comments.CommentsInfo
 import org.schabi.newpipe.extractor.comments.CommentsInfoItem
+import org.schabi.newpipe.extractor.exceptions.ContentNotAvailableException
 import org.schabi.newpipe.extractor.feed.FeedInfo
 import org.schabi.newpipe.extractor.kiosk.KioskInfo
 import org.schabi.newpipe.extractor.linkhandler.ListLinkHandler
@@ -100,7 +101,12 @@ object Repository {
                     KidsFallback.load(url)
                 } catch (fallback: Exception) {
                     android.util.Log.w("Vidtube", "Plan B para videos de niños falló", fallback)
-                    throw e
+                    // Mostramos el motivo del plan B para poder diagnosticarlo
+                    throw ContentNotAvailableException(
+                        if (fallback is ContentNotAvailableException) fallback.message
+                        else "Plan B (TV) también falló: ${fallback.javaClass.simpleName} ${fallback.message ?: ""}",
+                        fallback,
+                    )
                 }
             } else {
                 throw e
