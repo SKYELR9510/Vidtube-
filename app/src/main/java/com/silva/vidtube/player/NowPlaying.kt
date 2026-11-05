@@ -87,9 +87,16 @@ object NowPlaying {
                 val cached = prefetched?.takeIf { it.first == video.url }?.second
                 prefetched = null
                 val info = cached ?: Repository.stream(video.url)
-                val full = VideoItem.from(info).copy(
-                    thumbnail = VideoItem.from(info).thumbnail ?: video.thumbnail,
-                    channelAvatar = VideoItem.from(info).channelAvatar ?: video.channelAvatar,
+                val fromInfo = VideoItem.from(info)
+                // Si la respuesta trae pocos datos, completamos con lo que ya mostraba la lista
+                val full = fromInfo.copy(
+                    title = fromInfo.title.ifBlank { video.title },
+                    thumbnail = fromInfo.thumbnail ?: video.thumbnail,
+                    channelName = fromInfo.channelName.ifBlank { video.channelName },
+                    channelUrl = fromInfo.channelUrl ?: video.channelUrl,
+                    channelAvatar = fromInfo.channelAvatar ?: video.channelAvatar,
+                    views = if (fromInfo.views >= 0) fromInfo.views else video.views,
+                    uploaded = fromInfo.uploaded ?: video.uploaded,
                 )
                 _state.value = State(
                     video = full,

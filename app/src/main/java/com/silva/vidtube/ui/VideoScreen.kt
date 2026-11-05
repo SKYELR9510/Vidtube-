@@ -367,8 +367,11 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
                     Text("Reproducción automática", color = VColors.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     val next = upNext
                     Text(
-                        if (settings.autoplay && next != null) "A continuación: ${next.title}"
-                        else "Desactivada",
+                        when {
+                            !settings.autoplay -> "Desactivada"
+                            next != null -> "A continuación: ${next.title}"
+                            else -> "No hay un video siguiente para este"
+                        },
                         color = VColors.Secondary,
                         fontSize = 12.sp,
                         maxLines = 1,

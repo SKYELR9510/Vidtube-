@@ -139,13 +139,24 @@ object KidsFallback {
         val streaming = json.optJSONObject("streamingData")
             ?: throw ContentNotAvailableException("Plan B (TV): sin formatos")
 
+        // La respuesta de la TV a veces no trae título ni canal: los pedimos a oEmbed
+        val oembed = if (details.optString("title").isBlank() || details.optString("author").isBlank()) {
+            runCatching {
+                JSONObject(
+                    DownloaderImpl.getInstance()
+                        .get("https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=$videoId")
+                        .responseBody() ?: ""
+                )
+            }.onFailure { Log.w(TAG, "oEmbed falló", it) }.getOrNull()
+        } else null
+
         val info = StreamInfo(
             yt.serviceId,
             "https://www.youtube.com/watch?v=$videoId",
             url,
             if (details.optBoolean("isLive")) StreamType.LIVE_STREAM else StreamType.VIDEO_STREAM,
             videoId,
-            details.optString("title"),
+            details.optString("title").ifBlank { oembed?.optString("title").orEmpty() },
             0,
         )
         val duration = details.optString("lengthSeconds").toLongOrNull() ?: 0L
@@ -267,9 +278,57 @@ object KidsFallback {
         info.videoStreams = videos
         info.videoOnlyStreams = videoOnly
         info.audioStreams = audios
+        completeMetadata(info, videoId, oembed)
         tvVideos += videoId
         Log.i(TAG, "Video $videoId cargado con el plan B (TV): ${videoOnly.size} video, ${audios.size} audio")
         return info
+    }
+
+    /**
+     * La respuesta de la TV trae pocos datos (a veces ni el título). Completamos con
+     * oEmbed (título, canal, miniatura) y buscamos videos parecidos para la reproducción
+     * automática, porque la TV no entrega "relacionados".
+     */
+    private fun completeMetadata(info: StreamInfo, videoId: String, o: JSONObject?) {
+        if (o != null) {
+            if (info.uploaderName.isNullOrBlank()) info.uploaderName = o.optString("author_name")
+            if (info.uploaderUrl.isNullOrBlank()) {
+                o.optString("author_url").takeIf { it.isNotBlank() }?.let { info.uploaderUrl = it }
+            }
+            if (info.thumbnails.isEmpty()) {
+                o.optString("thumbnail_url").takeIf { it.isNotBlank() }?.let {
+                    val h = o.optInt("thumbnail_height", Image.HEIGHT_UNKNOWN)
+                    info.thumbnails = listOf(
+                        Image(it, h, o.optInt("thumbnail_width", Image.WIDTH_UNKNOWN), Image.ResolutionLevel.fromHeight(h))
+                    )
+                }
+            }
+        }
+
+        // Avatar del canal
+        runCatching {
+            val url = info.uploaderUrl
+            if (!url.isNullOrBlank() && info.uploaderAvatars.isEmpty()) {
+                val ch = org.schabi.newpipe.extractor.channel.ChannelInfo.getInfo(ServiceList.YouTube, url)
+                info.uploaderAvatars = ch.avatars
+                if (info.uploaderSubscriberCount < 0) info.uploaderSubscriberCount = ch.subscriberCount
+            }
+        }.onFailure { Log.w(TAG, "Sin datos del canal", it) }
+
+        // "Relacionados": buscamos por el título para que la reproducción automática siga
+        runCatching {
+            val title = info.name
+            if (!title.isNullOrBlank()) {
+                val yt = ServiceList.YouTube
+                val search = org.schabi.newpipe.extractor.search.SearchInfo.getInfo(
+                    yt, yt.searchQHFactory.fromQuery(title)
+                )
+                info.relatedItems = search.relatedItems
+                    .filterIsInstance<org.schabi.newpipe.extractor.stream.StreamInfoItem>()
+                    .filter { it.url?.contains(videoId) != true }
+                    .take(20)
+            }
+        }.onFailure { Log.w(TAG, "Búsqueda de relacionados falló", it) }
     }
 
     private fun replaceParam(url: String, key: String, value: String): String =
