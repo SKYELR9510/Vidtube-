@@ -45,9 +45,15 @@ jobs:
       - name: Compilar APK firmado
         env:
           VIDTUBE_STORE_PASSWORD: ${{ secrets.VIDTUBE_STORE_PASSWORD }}
-          VIDTUBE_KEY_ALIAS: ${{ secrets.VIDTUBE_KEY_ALIAS }}
-          VIDTUBE_KEY_PASSWORD: ${{ secrets.VIDTUBE_KEY_PASSWORD }}
+          # El alias y la contraseña de la clave son opcionales: si no existen se usan
+          # "vidtube" y la misma contraseña del almacén.
+          VIDTUBE_KEY_ALIAS: ${{ secrets.VIDTUBE_KEY_ALIAS || 'vidtube' }}
+          VIDTUBE_KEY_PASSWORD: ${{ secrets.VIDTUBE_KEY_PASSWORD || secrets.VIDTUBE_STORE_PASSWORD }}
         run: |
+          if [ -z "$VIDTUBE_STORE_PASSWORD" ]; then
+            echo "::error::Falta el secreto VIDTUBE_STORE_PASSWORD. Revisa la guía GITHUB.md"
+            exit 1
+          fi
           chmod +x gradlew
           ./gradlew assembleRelease --stacktrace
           CODE=$((100 + VIDTUBE_BUILD))
