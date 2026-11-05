@@ -164,11 +164,19 @@ object KidsFallback {
         streaming.optJSONArray("formats")?.let { a -> for (i in 0 until a.length()) all += a.getJSONObject(i) }
         streaming.optJSONArray("adaptiveFormats")?.let { a -> for (i in 0 until a.length()) all += a.getJSONObject(i) }
 
+        var firstError: String? = null
+        var unsupported = 0
         for (f in all) {
             val itag = f.optInt("itag")
-            if (!ItagItem.isSupported(itag)) continue
+            if (!ItagItem.isSupported(itag)) {
+                unsupported++
+                continue
+            }
             val streamUrl = runCatching { resolveUrl(videoId, f) }
-                .onFailure { Log.w(TAG, "No se pudo descifrar itag $itag", it) }
+                .onFailure {
+                    Log.w(TAG, "No se pudo descifrar itag $itag", it)
+                    if (firstError == null) firstError = "${it.javaClass.simpleName}: ${it.message}".take(160)
+                }
                 .getOrNull() ?: continue
             val item = runCatching { ItagItem(ItagItem.getItag(itag)) }.getOrNull() ?: continue
             fillItag(item, f, duration)
@@ -206,7 +214,11 @@ object KidsFallback {
             }
         }
         if (videos.isEmpty() && videoOnly.isEmpty() && audios.isEmpty()) {
-            throw ContentNotAvailableException("Plan B (TV): no se pudo leer ningún formato")
+            val abr = streaming.has("serverAbrStreamingUrl")
+            throw ContentNotAvailableException(
+                "Plan B (TV): no se pudo leer ningún formato (${all.size} formatos, " +
+                    "$unsupported no soportados, abr=$abr). ${firstError ?: ""}"
+            )
         }
         info.videoStreams = videos
         info.videoOnlyStreams = videoOnly
@@ -233,7 +245,12 @@ object KidsFallback {
                 YoutubeJavaScriptPlayerManager.deobfuscateSignature(videoId, s), "UTF-8"
             )
         }
-        return YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(videoId, url)
+        return try {
+            YoutubeJavaScriptPlayerManager.getUrlWithThrottlingParameterDeobfuscated(videoId, url)
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo descifrar el parámetro n; uso la URL tal cual", e)
+            url
+        }
     }
 
     private fun fillItag(item: ItagItem, f: JSONObject, durationSec: Long) {
