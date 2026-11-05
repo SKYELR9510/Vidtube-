@@ -1,0 +1,48 @@
+name: Actualizar motor de YouTube (NewPipe Extractor)
+
+# Todos los días revisa qué versión del extractor usa la app NewPipe.
+# Si hay una más nueva, la aplica a Vidtube, compila y publica la actualización.
+on:
+  schedule:
+    - cron: "17 11 * * *"   # 6:17 a. m. hora de Lima
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.compare.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comparar con NewPipe
+        id: compare
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/TeamNewPipe/NewPipe/dev/gradle/libs.versions.toml -o np.toml
+          NEW_EXT=$(grep -E '^teamnewpipe-newpipe-extractor *=' np.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          NEW_JSON=$(grep -E '^teamnewpipe-nanojson *=' np.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          CUR_EXT=$(grep -oE 'NewPipeExtractor:[^"]+' app/build.gradle.kts | cut -d: -f2)
+          CUR_JSON=$(grep -oE 'nanojson:[^"]+' app/build.gradle.kts | cut -d: -f2)
+          echo "NewPipe usa extractor=$NEW_EXT nanojson=$NEW_JSON"
+          echo "Vidtube usa extractor=$CUR_EXT nanojson=$CUR_JSON"
+          if [ -z "$NEW_EXT" ]; then echo "::error::No se pudo leer la versión de NewPipe"; exit 1; fi
+          if [ "$NEW_EXT" = "$CUR_EXT" ] && [ "$NEW_JSON" = "$CUR_JSON" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sed -i "s|NewPipeExtractor:$CUR_EXT|NewPipeExtractor:$NEW_EXT|" app/build.gradle.kts
+          [ -n "$NEW_JSON" ] && sed -i "s|nanojson:$CUR_JSON|nanojson:$NEW_JSON|" app/build.gradle.kts
+          git config user.name "vidtube-bot"
+          git config user.email "vidtube-bot@users.noreply.github.com"
+          git commit -am "Actualizar motor de YouTube (NewPipe Extractor ${NEW_EXT:0:10})"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    uses: ./.github/workflows/build.yml
+    secrets: inherit

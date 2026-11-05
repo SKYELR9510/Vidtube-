@@ -1,0 +1,203 @@
+package com.silva.vidtube.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.NorthWest
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.silva.vidtube.data.Library
+import com.silva.vidtube.data.Repository
+import com.silva.vidtube.data.VideoItem
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+class SearchViewModel : ViewModel() {
+    var text by mutableStateOf("")
+    var submitted by mutableStateOf<String?>(null)
+        private set
+    var suggestions by mutableStateOf<List<String>>(emptyList())
+        private set
+    var results: Paged? by mutableStateOf(null)
+        private set
+    private var suggestJob: Job? = null
+
+    fun onTextChange(value: String) {
+        text = value
+        submitted = null
+        suggestJob?.cancel()
+        if (value.isBlank()) {
+            suggestions = emptyList()
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            delay(250)
+            suggestions = Repository.suggestions(value)
+        }
+    }
+
+    fun submit(query: String = text) {
+        val q = query.trim()
+        if (q.isEmpty()) return
+        text = q
+        submitted = q
+        suggestions = emptyList()
+        Library.addSearch(q)
+        val p = Paged(viewModelScope) { Repository.search(q) }
+        results = p
+        p.loadIfNeeded()
+    }
+}
+
+@Composable
+fun SearchScreen(
+    onBack: () -> Unit,
+    onVideo: (VideoItem) -> Unit,
+    onChannel: (String) -> Unit,
+    vm: SearchViewModel = viewModel(),
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { if (vm.submitted == null) focus.requestFocus() }
+
+    Column(Modifier.fillMaxSize().background(VColors.Background)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(56.dp)
+                .padding(end = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = VColors.Text)
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(VColors.Chip)
+                    .padding(start = 16.dp, end = 4.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (vm.text.isEmpty()) {
+                    Text("Buscar en Vidtube", color = VColors.Secondary, fontSize = 16.sp)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BasicTextField(
+                        value = vm.text,
+                        onValueChange = vm::onTextChange,
+                        singleLine = true,
+                        textStyle = TextStyle(color = VColors.Text, fontSize = 16.sp),
+                        cursorBrush = SolidColor(VColors.Red),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            keyboard?.hide()
+                            vm.submit()
+                        }),
+                        modifier = Modifier.weight(1f).focusRequester(focus),
+                    )
+                    if (vm.text.isNotEmpty()) {
+                        IconButton(onClick = { vm.onTextChange("") }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Filled.Close, "Borrar", tint = VColors.Text, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        val results = vm.results
+        if (vm.submitted != null && results != null) {
+            FeedList(
+                paged = results,
+                onVideo = onVideo,
+                onChannel = onChannel,
+                emptyTitle = "Sin resultados",
+                emptySubtitle = "Prueba con otras palabras.",
+            )
+        } else {
+            val recent = Library.searches.value
+            val rows: List<Pair<String, Boolean>> =
+                if (vm.text.isBlank()) recent.map { it to true }
+                else vm.suggestions.map { it to false }
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(rows, key = { it.first + it.second }) { (s, isRecent) ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                keyboard?.hide()
+                                vm.submit(s)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            if (isRecent) Icons.Outlined.History else Icons.Outlined.Search,
+                            null,
+                            tint = VColors.Text,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            s,
+                            color = VColors.Text,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { vm.onTextChange("$s ") }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Outlined.NorthWest, "Completar", tint = VColors.Text, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

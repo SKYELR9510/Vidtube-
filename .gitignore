@@ -1,0 +1,13 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+# Clave de firma: NUNCA subirla al repositorio
+*.jks
+*.keystore
+keystore.properties
+keystore-base64.txt
