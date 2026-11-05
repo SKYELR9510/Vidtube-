@@ -86,7 +86,7 @@ android {
 
 dependencies {
     // Motor que obtiene los videos de YouTube sin anuncios (misma versión que usa NewPipe)
-    implementation("com.github.TeamNewPipe:NewPipeExtractor:e8f89145a830b4d6cae32412007f24ea8b36c73a")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:6cb36e982311dc1c529997bc329013afe75f37d1")
     implementation("com.github.TeamNewPipe:nanojson:e9d656ddb49a412a5a0a5d5ef20ca7ef09549996")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
 
