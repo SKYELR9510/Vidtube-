@@ -143,8 +143,12 @@ object Repository {
             info.nextPage?.takeIf { Page.isValid(it) }?.let { p ->
                 runCatching { items = items + SearchInfo.getMoreItems(yt, handler, p).items }
             }
+            // La búsqueda no siempre marca los shorts: aceptamos también videos de hasta 3 min
             items.filterIsInstance<StreamInfoItem>()
-                .filter { it.isShortFormContent || it.url.contains("/shorts/") }
+                .filter {
+                    it.streamType != org.schabi.newpipe.extractor.stream.StreamType.LIVE_STREAM &&
+                        (it.isShortFormContent || it.url.contains("/shorts/") || it.duration in 1..180)
+                }
                 .map { VideoItem.from(it).copy(isShort = true) }
         }.getOrDefault(emptyList())
     }

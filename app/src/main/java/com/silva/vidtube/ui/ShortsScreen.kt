@@ -81,7 +81,7 @@ class ShortsViewModel : ViewModel() {
 
     private fun topics(): List<String> {
         val interests = Library.interests(6).map { it.query }
-        return (interests + listOf("música", "humor", "viral")).distinct()
+        return (interests + listOf("música", "humor", "fútbol", "recetas", "baile", "viral")).distinct()
     }
 
     fun loadIfNeeded() {
@@ -105,24 +105,33 @@ class ShortsViewModel : ViewModel() {
             try {
                 val t = topics()
                 val subs = Library.subscriptions.value
-                val pickedTopics = List(2) { i -> t[(round * 2 + i) % t.size] }
-                val pickedSubs = if (subs.isEmpty()) emptyList()
-                else List(minOf(3, subs.size)) { i -> subs[(round * 3 + i) % subs.size] }.distinct()
-                round++
+                var tries = 0
+                var added = 0
+                // Si una ronda no trae nada nuevo, probamos con otros temas (hasta 3 veces)
+                while (added == 0 && tries < 3) {
+                    tries++
+                    val pickedTopics = List(2) { i -> t[(round * 2 + i) % t.size] }.distinct()
+                    val pickedSubs = if (subs.isEmpty()) emptyList()
+                    else List(minOf(3, subs.size)) { i -> subs[(round * 3 + i) % subs.size] }.distinct()
+                    round++
 
-                val results = (pickedTopics.map { q -> async { Repository.shortsSearch(q) } } +
-                    pickedSubs.map { ch -> async { Repository.channelShorts(ch) } }).awaitAll()
+                    val results = (pickedTopics.map { q -> async { Repository.shortsSearch(q) } } +
+                        pickedSubs.map { ch -> async { Repository.channelShorts(ch) } }).awaitAll()
 
-                // Intercalar las fuentes para que no salgan 10 seguidos del mismo
-                val mixed = ArrayList<VideoItem>()
-                val queues = results.map { ArrayDeque(it.shuffled()) }
-                while (queues.any { it.isNotEmpty() }) queues.forEach { q -> q.removeFirstOrNull()?.let { mixed += it } }
+                    // Intercalar las fuentes para que no salgan 10 seguidos del mismo
+                    val mixed = ArrayList<VideoItem>()
+                    val queues = results.map { ArrayDeque(it.shuffled()) }
+                    while (queues.any { it.isNotEmpty() }) {
+                        queues.forEach { q -> q.removeFirstOrNull()?.let { mixed += it } }
+                    }
 
-                val seen = items.map { it.url }.toHashSet()
-                val watched = Library.history.value.map { it.url }.toHashSet()
-                val fresh = mixed.filter { seen.add(it.url) && it.url !in watched }
-                items = items + fresh
-                if (items.isEmpty()) error = "No se encontraron Shorts. Desliza hacia abajo para reintentar."
+                    val seen = items.map { it.url }.toHashSet()
+                    val watched = Library.history.value.map { it.url }.toHashSet()
+                    val fresh = mixed.filter { seen.add(it.url) && it.url !in watched }
+                    items = items + fresh
+                    added = fresh.size
+                }
+                if (items.isEmpty()) error = "No se encontraron Shorts. Toca Reintentar."
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 error = Paged.friendly(e)
