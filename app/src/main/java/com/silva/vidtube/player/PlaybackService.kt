@@ -139,6 +139,9 @@ class PlaybackService : Service() {
         scope.launch {
             combine(NowPlaying.state, NowPlaying.upNext) { s, n -> s?.video?.url to n?.url }
                 .collect {
+                    // Empezamos a bajar la carátula apenas se abre el video, para que llegue
+                    // antes de que empiece a sonar (algunas pantallas de bloqueo no la actualizan después)
+                    artFor(NowPlaying.state.value?.video?.thumbnail)
                     connector?.invalidateMediaSessionMetadata()
                     connector?.invalidateMediaSessionPlaybackState()
                     manager.invalidate()
@@ -222,10 +225,6 @@ class PlaybackService : Service() {
                 b.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, video.durationSec * 1000)
             }
             val art = artFor(video.thumbnail)
-            video.thumbnail?.let {
-                b.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, it)
-                b.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, it)
-            }
             if (art != null) {
                 b.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, art)
                 b.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, art)
@@ -256,6 +255,13 @@ class PlaybackService : Service() {
                         scope.launch {
                             connector?.invalidateMediaSessionMetadata()
                             notificationManager?.invalidate()
+                            // La pantalla de bloqueo de algunos celulares (Xiaomi/HyperOS) solo
+                            // relee la carátula cuando la sesión "cambia": la reactivamos
+                            mediaSession?.let { ms ->
+                                ms.isActive = false
+                                ms.isActive = true
+                            }
+                            connector?.invalidateMediaSessionPlaybackState()
                         }
                     }
                 }
