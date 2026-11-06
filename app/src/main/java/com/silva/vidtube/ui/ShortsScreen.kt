@@ -141,6 +141,11 @@ class ShortsViewModel : ViewModel() {
         }
     }
 
+    fun remove(item: VideoItem) {
+        items = items.filterNot { it.url == item.url }
+        if (items.size < 4) loadMore()
+    }
+
     suspend fun info(item: VideoItem): StreamInfo? {
         cache[item.url]?.let { return it }
         val job = pending.getOrPut(item.url) {
@@ -154,7 +159,7 @@ class ShortsViewModel : ViewModel() {
 
     /** Carga por adelantado los próximos shorts. */
     fun prefetch(index: Int) {
-        items.drop(index + 1).take(2).forEach { v ->
+        items.drop(index + 1).take(3).forEach { v ->
             if (!cache.containsKey(v.url) && !pending.containsKey(v.url)) {
                 pending[v.url] = viewModelScope.async { runCatching { Repository.stream(v.url) }.getOrNull() }
             }
@@ -187,7 +192,8 @@ fun ShortsScreen(
     // Cada vez que cambia el short visible, se reproduce ese
     LaunchedEffect(vm.items.isNotEmpty()) {
         if (vm.items.isEmpty()) return@LaunchedEffect
-        snapshotFlow { pager.currentPage }.distinctUntilChanged().collect { page ->
+        snapshotFlow { pager.currentPage to vm.items.getOrNull(pager.currentPage)?.url }
+            .distinctUntilChanged().collect { (page, _) ->
             val item = vm.items.getOrNull(page) ?: return@collect
             playJob?.cancel()
             playing = true
@@ -195,8 +201,12 @@ fun ShortsScreen(
             PlayerHolder.playerOrNull?.stop()
             playJob = scope.launch {
                 val info = vm.info(item)
-                if (info != null && pager.currentPage == page) {
-                    runCatching { PlayerHolder.playShort(context, info) }
+                when {
+                    // Videos horizontales que se colaron: se quitan y pasa el siguiente
+                    info != null && isLandscape(info) -> vm.remove(item)
+                    // No se pudo cargar: también se salta
+                    info == null -> vm.remove(item)
+                    pager.currentPage == page -> runCatching { PlayerHolder.playShort(context, info) }
                 }
                 loadingCurrent = false
             }
@@ -263,6 +273,14 @@ fun ShortsScreen(
             }
         }
     }
+}
+
+/** ¿El video es horizontal? (los Shorts son verticales) */
+private fun isLandscape(info: StreamInfo): Boolean {
+    val v = (info.videoOnlyStreams + info.videoStreams).maxByOrNull { it.height } ?: return false
+    val w = v.width
+    val h = v.height
+    return w > 0 && h > 0 && w > h
 }
 
 @Composable

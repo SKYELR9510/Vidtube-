@@ -73,6 +73,12 @@ class PlaybackService : Service() {
         connector = MediaSessionConnector(session).apply {
             setPlayer(player)
             setQueueNavigator(SkipNavigator())
+            // Sin ⏪ ⏩: así la pantalla de bloqueo y el carro muestran ⏮ ⏭ (anterior / siguiente)
+            setEnabledPlaybackActions(
+                PlaybackStateCompat.ACTION_PLAY_PAUSE or PlaybackStateCompat.ACTION_PLAY or
+                    PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_SEEK_TO or
+                    PlaybackStateCompat.ACTION_STOP
+            )
             setMediaMetadataProvider { p -> buildMetadata(p) }
         }
 
@@ -216,8 +222,13 @@ class PlaybackService : Service() {
                 b.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, video.durationSec * 1000)
             }
             val art = artFor(video.thumbnail)
+            video.thumbnail?.let {
+                b.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, it)
+                b.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, it)
+            }
             if (art != null) {
                 b.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, art)
+                b.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, art)
                 b.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, art)
             }
         }
@@ -235,7 +246,11 @@ class PlaybackService : Service() {
                 val request = okhttp3.Request.Builder().url(url).build()
                 DownloaderImpl.getInstance().client.newCall(request).execute().use { r ->
                     val bytes = r.body?.bytes() ?: return@use
-                    val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@use
+                    val raw = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@use
+                    // Recorte cuadrado al centro, como una portada de disco
+                    val side = minOf(raw.width, raw.height)
+                    val square = Bitmap.createBitmap(raw, (raw.width - side) / 2, (raw.height - side) / 2, side, side)
+                    val bmp = if (side > 512) Bitmap.createScaledBitmap(square, 512, 512, true) else square
                     if (artUrl == url) {
                         artBitmap = bmp
                         scope.launch {
