@@ -24,7 +24,13 @@ data class VideoItem(
     val uploaded: String?,
     val isLive: Boolean,
     val isShort: Boolean = false,
+    /** Fecha de publicación (segundos desde 1970) si se conoce; sirve para mostrar lo reciente. */
+    val publishedAt: Long? = null,
 ) {
+    /** Días desde que se publicó (null si no se sabe). */
+    val ageDays: Long?
+        get() = publishedAt?.let { (System.currentTimeMillis() / 1000 - it) / 86_400 }
+
     fun toJson(): JSONObject = JSONObject()
         .put("url", url)
         .put("title", title)
@@ -36,6 +42,8 @@ data class VideoItem(
         .put("views", views)
         .put("uploaded", uploaded ?: "")
         .put("live", isLive)
+        .put("short", isShort)
+        .put("published", publishedAt ?: 0L)
 
     companion object {
         fun fromJson(o: JSONObject) = VideoItem(
@@ -49,6 +57,8 @@ data class VideoItem(
             views = o.optLong("views", -1),
             uploaded = o.optString("uploaded").ifBlank { null },
             isLive = o.optBoolean("live", false),
+            isShort = o.optBoolean("short", false),
+            publishedAt = o.optLong("published", 0L).takeIf { it > 0 },
         )
 
         fun from(item: StreamInfoItem) = VideoItem(
@@ -64,6 +74,8 @@ data class VideoItem(
             isLive = item.streamType == StreamType.LIVE_STREAM ||
                 item.streamType == StreamType.AUDIO_LIVE_STREAM,
             isShort = item.isShortFormContent,
+            publishedAt = item.uploadDate?.instant?.epochSecond
+                ?: parseAgo(item.textualUploadDate),
         )
 
         fun from(info: StreamInfo) = VideoItem(
@@ -78,6 +90,7 @@ data class VideoItem(
             uploaded = friendlyDate(info.textualUploadDate, info.uploadDate),
             isLive = info.streamType == StreamType.LIVE_STREAM ||
                 info.streamType == StreamType.AUDIO_LIVE_STREAM,
+            publishedAt = info.uploadDate?.instant?.epochSecond,
         )
     }
 }
@@ -159,4 +172,22 @@ fun relativeTime(instant: Instant): String {
         secs < 365 * 86_400 -> plural(secs / (30 * 86_400), "mes", "meses")
         else -> plural(secs / (365 * 86_400), "año", "años")
     }
+}
+
+/** Convierte "hace 3 años" / "3 years ago" en una fecha aproximada (segundos). */
+fun parseAgo(text: String?): Long? {
+    if (text.isNullOrBlank()) return null
+    val t = text.lowercase()
+    val n = Regex("(\\d+)").find(t)?.groupValues?.get(1)?.toLongOrNull() ?: 1L
+    val unit = when {
+        "seg" in t || "second" in t -> 1L
+        "min" in t -> 60L
+        "hora" in t || "hour" in t -> 3_600L
+        "día" in t || "dia" in t || "day" in t -> 86_400L
+        "semana" in t || "week" in t -> 7 * 86_400L
+        "mes" in t || "month" in t -> 30 * 86_400L
+        "año" in t || "ano" in t || "year" in t -> 365 * 86_400L
+        else -> return null
+    }
+    return System.currentTimeMillis() / 1000 - n * unit
 }

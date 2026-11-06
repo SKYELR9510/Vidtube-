@@ -118,6 +118,8 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         NowPlaying.saveCurrentPosition()
+        // Los Shorts no suenan en segundo plano
+        if (PlayerHolder.shortsMode && !isChangingConfigurations) PlayerHolder.playerOrNull?.pause()
         val keepPlaying = Library.settings.value.backgroundPlay || isInPictureInPictureMode
         if (!keepPlaying && !isChangingConfigurations) PlayerHolder.playerOrNull?.pause()
     }

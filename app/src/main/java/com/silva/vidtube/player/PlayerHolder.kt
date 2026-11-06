@@ -58,7 +58,7 @@ object PlayerHolder {
         val appContext = context.applicationContext
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying && !PlaybackService.running) startService(appContext)
+                if (isPlaying && !shortsMode && !PlaybackService.running) startService(appContext)
             }
         })
         _player = p
@@ -93,9 +93,36 @@ object PlayerHolder {
      * Prepara y reproduce el video con la calidad pedida.
      * La fuente se arma en segundo plano porque algunos formatos necesitan consultar a YouTube.
      */
+    /** true mientras se ven Shorts: sin notificación ni segundo plano, en bucle. */
+    @Volatile
+    var shortsMode = false
+
+    /** Reproduce un Short: en bucle, sin servicio en segundo plano. */
+    suspend fun playShort(context: Context, info: StreamInfo) {
+        val source = withContext(Dispatchers.IO) { buildSource(info, 720) }
+        val p = player(context)
+        shortsMode = true
+        p.repeatMode = Player.REPEAT_MODE_ONE
+        p.setMediaSource(source, 0L)
+        p.prepare()
+        p.playWhenReady = true
+    }
+
+    fun stopShorts(context: Context) {
+        if (!shortsMode) return
+        shortsMode = false
+        _player?.let {
+            it.repeatMode = Player.REPEAT_MODE_OFF
+            it.stop()
+            it.clearMediaItems()
+        }
+    }
+
     suspend fun play(context: Context, info: StreamInfo, quality: Int, startMs: Long) {
         val source = withContext(Dispatchers.IO) { buildSource(info, quality) }
         val p = player(context)
+        shortsMode = false
+        p.repeatMode = Player.REPEAT_MODE_OFF
         p.setMediaSource(source, startMs)
         p.prepare()
         p.playWhenReady = true

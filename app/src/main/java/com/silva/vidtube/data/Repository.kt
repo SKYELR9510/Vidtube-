@@ -21,6 +21,7 @@ import org.schabi.newpipe.extractor.kiosk.KioskInfo
 import org.schabi.newpipe.extractor.linkhandler.ListLinkHandler
 import org.schabi.newpipe.extractor.linkhandler.SearchQueryHandler
 import org.schabi.newpipe.extractor.search.SearchInfo
+import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 
@@ -84,6 +85,88 @@ object Repository {
                 PagedResult(p.items.mapNotNull { it.toEntry() }, searchNext(handler, p.nextPage))
             }
         }
+    }
+
+    /**
+     * Búsqueda de lo más reciente sobre un tema: descarta shorts y videos de más de
+     * [maxAgeDays] días, y pone primero lo del último mes.
+     */
+    suspend fun freshSearch(query: String, maxAgeDays: Long = 365): PagedResult = withContext(Dispatchers.IO) {
+        val handler = yt.searchQHFactory.fromQuery(query, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
+        val info = SearchInfo.getInfo(yt, handler)
+        freshPage(handler, info.relatedItems, info.nextPage, maxAgeDays, pagesLeft = 2)
+    }
+
+    private fun freshPage(
+        handler: SearchQueryHandler,
+        items: List<org.schabi.newpipe.extractor.InfoItem>,
+        next: Page?,
+        maxAgeDays: Long,
+        pagesLeft: Int,
+    ): PagedResult {
+        var all = items
+        var page = next
+        var left = pagesLeft
+        fun filtered() = all.filterIsInstance<StreamInfoItem>()
+            .map { VideoItem.from(it) }
+            .filter { !it.isShort && !it.isLive && (it.ageDays ?: 0) <= maxAgeDays }
+        // Si salió muy poco reciente, traemos una o dos páginas más
+        while (filtered().size < 12 && left > 0 && page != null && Page.isValid(page)) {
+            val p = SearchInfo.getMoreItems(yt, handler, page)
+            all = all + p.items
+            page = p.nextPage
+            left--
+        }
+        val videos = filtered().sortedBy {
+            val age = it.ageDays ?: 400
+            when { age <= 31 -> 0; age <= 180 -> 1; else -> 2 }
+        }
+        val more: (suspend () -> PagedResult)? = if (page != null && Page.isValid(page)) {
+            val p0 = page
+            ({
+                withContext(Dispatchers.IO) {
+                    val p = SearchInfo.getMoreItems(yt, handler, p0)
+                    freshPage(handler, p.items, p.nextPage, maxAgeDays, pagesLeft = 1)
+                }
+            })
+        } else null
+        return PagedResult(videos.map { FeedEntry.Video(it) }, more)
+    }
+
+    // ---------- Shorts ----------
+    /** Shorts sobre un tema (búsqueda con #shorts). */
+    suspend fun shortsSearch(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
+        runCatching {
+            val handler = yt.searchQHFactory.fromQuery("$query #shorts")
+            val info = SearchInfo.getInfo(yt, handler)
+            var items = info.relatedItems
+            info.nextPage?.takeIf { Page.isValid(it) }?.let { p ->
+                runCatching { items = items + SearchInfo.getMoreItems(yt, handler, p).items }
+            }
+            items.filterIsInstance<StreamInfoItem>()
+                .filter { it.isShortFormContent || it.url.contains("/shorts/") }
+                .map { VideoItem.from(it).copy(isShort = true) }
+        }.getOrDefault(emptyList())
+    }
+
+    /** Últimos shorts de un canal (pestaña Shorts del canal). */
+    suspend fun channelShorts(channel: ChannelItem): List<VideoItem> = withContext(Dispatchers.IO) {
+        runCatching {
+            val info = ChannelInfo.getInfo(yt, channel.url)
+            val tab = info.tabs.firstOrNull { it.contentFilters.contains(ChannelTabs.SHORTS) }
+                ?: return@runCatching emptyList()
+            ChannelTabInfo.getInfo(yt, tab).relatedItems
+                .filterIsInstance<StreamInfoItem>()
+                .take(8)
+                .map {
+                    VideoItem.from(it).copy(
+                        isShort = true,
+                        channelName = it.uploaderName?.ifBlank { null } ?: channel.name,
+                        channelUrl = channel.url,
+                        channelAvatar = channel.avatar,
+                    )
+                }
+        }.getOrDefault(emptyList())
     }
 
     suspend fun suggestions(query: String): List<String> = withContext(Dispatchers.IO) {

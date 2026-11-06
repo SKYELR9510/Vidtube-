@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Slideshow
+import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.outlined.Home
@@ -46,6 +48,7 @@ private data class Tab(val route: String, val label: String, val selected: Image
 
 private val tabs = listOf(
     Tab("home", "Inicio", Icons.Filled.Home, Icons.Outlined.Home),
+    Tab("shorts", "Shorts", Icons.Filled.Slideshow, Icons.Outlined.Slideshow),
     Tab("subs", "Suscripciones", Icons.Filled.Subscriptions, Icons.Outlined.Subscriptions),
     Tab("library", "Tú", Icons.Filled.VideoLibrary, Icons.Outlined.VideoLibrary),
 )
@@ -100,13 +103,15 @@ fun VidtubeRoot(isInPip: Boolean) {
             bottomBar = {
                 Column {
                     val current = now
-                    if (current != null && !expanded) MiniPlayer(current)
+                    val onShorts = nav.currentBackStackEntryAsState().value?.destination?.route == "shorts"
+                    if (current != null && !expanded && !onShorts) MiniPlayer(current)
                     BottomBar(nav)
                 }
             },
         ) { padding ->
             NavHost(nav, startDestination = "home", modifier = Modifier.padding(padding)) {
                 composable("home") { HomeScreen(openVideo, openChannel, openSearch) }
+                composable("shorts") { ShortsScreen(onChannel = openChannel) }
                 composable("subs") { SubscriptionsScreen(openVideo, openChannel, openSearch) }
                 composable("library") {
                     LibraryScreen(

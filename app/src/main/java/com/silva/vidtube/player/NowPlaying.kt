@@ -149,12 +149,13 @@ object NowPlaying {
         listenerAttached = true
         PlayerHolder.player(context).addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) onEnded(context)
+                if (playbackState == Player.STATE_ENDED && !PlayerHolder.shortsMode) onEnded(context)
             }
 
             // El botón ■ de la notificación vacía el reproductor: cerramos el video
             // para no dejar una pantalla de reproductor sin nada que reproducir.
             override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                if (PlayerHolder.shortsMode) return
                 val s = _state.value ?: return
                 if (timeline.isEmpty && !s.loading && s.info != null) close(context)
             }

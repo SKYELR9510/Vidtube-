@@ -45,22 +45,39 @@ import kotlinx.coroutines.coroutineScope
 
 data class HomeChip(val id: String, val label: String)
 
-val homeChips = listOf(
-    HomeChip("todo", "Todo"),
+private val fixedChips = listOf(
     HomeChip("trending_music", "Música"),
+    HomeChip("mixes", "Mixes"),
+    HomeChip("live", "En vivo"),
     HomeChip("trending_gaming", "Videojuegos"),
     HomeChip("trending_movies_and_shows", "Películas"),
     HomeChip("trending_podcasts_episodes", "Podcasts"),
-    HomeChip("live", "En vivo"),
 )
 
+/** "Todo" + tus temas (según búsquedas y canales que más ves) + categorías fijas. */
+fun buildHomeChips(): List<HomeChip> {
+    val interests = Library.interests(5).map { HomeChip("i:" + it.query, it.label) }
+    return listOf(HomeChip("todo", "Todo")) + interests + fixedChips
+}
+
 class HomeViewModel : ViewModel() {
-    var selected by mutableStateOf(homeChips.first().id)
+    var selected by mutableStateOf("todo")
+    var chips by mutableStateOf(buildHomeChips())
     var updateChecked = false
     private val lists = HashMap<String, Paged>()
 
     fun list(id: String): Paged = lists.getOrPut(id) {
-        Paged(viewModelScope) { if (id == "todo") loadMix() else Repository.kiosk(id) }
+        Paged(viewModelScope) {
+            when {
+                id == "todo" -> loadMix()
+                id.startsWith("i:") -> Repository.freshSearch(id.removePrefix("i:"))
+                id == "mixes" -> Repository.freshSearch(
+                    "mix " + (Library.interests(1).firstOrNull()?.query ?: "música") + " 2026",
+                    maxAgeDays = 365,
+                )
+                else -> Repository.kiosk(id)
+            }
+        }
     }
 
     /**
@@ -75,18 +92,26 @@ class HomeViewModel : ViewModel() {
         val musicJob = async { runCatching { Repository.kiosk("trending_music") } }
         val gamingJob = async { runCatching { Repository.kiosk("trending_gaming") } }
 
+        // Lo más reciente de tus 2 temas principales (últimos ~4 meses)
+        val freshJobs = Library.interests(2).map { interest ->
+            async { runCatching { Repository.freshSearch(interest.query, maxAgeDays = 120).items }.getOrDefault(emptyList()) }
+        }
+
         val watched = Library.history.value.map { it.url }.toHashSet()
         val forYou = Library.forYou(System.currentTimeMillis()).map { FeedEntry.Video(it) }
+        val fresh = freshJobs.map { it.await() }.reduceOrNull { a, b -> interleave(a, b) }.orEmpty()
+            .filter { e -> e !is FeedEntry.Video || e.video.url !in watched }
         val subs = subsJob.await().filter { it.url !in watched }.take(40).map { FeedEntry.Video(it) }
         val music = musicJob.await()
         val gaming = gamingJob.await()
         val trending = interleave(music.getOrNull()?.items.orEmpty(), gaming.getOrNull()?.items.orEmpty())
 
-        if (forYou.isEmpty() && subs.isEmpty() && trending.isEmpty()) {
+        if (forYou.isEmpty() && subs.isEmpty() && trending.isEmpty() && fresh.isEmpty()) {
             throw music.exceptionOrNull() ?: gaming.exceptionOrNull() ?: Exception("Sin contenido")
         }
         // 2 de "para ti", 1 de suscripciones… y cada tanto una tendencia
-        val personal = interleave(forYou, subs, 2)
+        // Primero lo nuevo de tus temas y suscripciones, luego recomendaciones
+        val personal = interleave(interleave(fresh, subs), forYou, 2)
         val mixed = if (personal.isEmpty()) trending else interleave(personal, trending, 4)
         PagedResult(mixed.distinctBy { it.key }, null)
     }
@@ -111,6 +136,7 @@ fun HomeScreen(
     onSearch: () -> Unit,
     vm: HomeViewModel = viewModel(),
 ) {
+    LaunchedEffect(Unit) { vm.chips = buildHomeChips() }
     val paged = vm.list(vm.selected)
     LaunchedEffect(vm.selected) { paged.loadIfNeeded() }
     // Al abrir la app revisamos (una vez) si hay versión nueva en GitHub
@@ -133,7 +159,7 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         ) {
-            items(homeChips, key = { it.id }) { chip ->
+            items(vm.chips, key = { it.id }) { chip ->
                 val sel = chip.id == vm.selected
                 Text(
                     chip.label,

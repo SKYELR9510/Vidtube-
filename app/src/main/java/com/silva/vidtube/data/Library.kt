@@ -130,13 +130,42 @@ object Library {
         val watched = _history.value.map { it.url }.toHashSet()
         val random = java.util.Random(seed)
         val queues = recommendationBatches.map { b ->
-            ArrayDeque(b.filter { it.url !in watched }.shuffled(random))
+            // Fuera lo de hace más de 2 años; lo más nuevo primero
+            val fresh = b.filter { it.url !in watched && (it.ageDays ?: 0) <= 730 }
+            ArrayDeque(fresh.shuffled(random).sortedBy { (it.ageDays ?: 365) / 90 })
         }
         val out = LinkedHashMap<String, VideoItem>()
         while (queues.any { it.isNotEmpty() } && out.size < 80) {
             queues.forEach { q -> q.removeFirstOrNull()?.let { out.putIfAbsent(it.url, it) } }
         }
         return out.values.toList()
+    }
+
+    // ---------- Intereses (para las categorías del Inicio y los Shorts) ----------
+    data class Interest(val label: String, val query: String)
+
+    /**
+     * Lo que más te interesa según tus búsquedas recientes y los canales que más ves.
+     * Ej.: buscaste "cumbia" → categoría "Cumbia"; ves mucho a "Orquesta La Bella Luz" → esa.
+     */
+    fun interests(max: Int = 5): List<Interest> {
+        val out = LinkedHashMap<String, Interest>()
+        _searches.value.take(8).forEach { q ->
+            val clean = q.trim()
+            if (clean.length >= 3) {
+                val label = clean.replaceFirstChar { it.uppercase() }.take(24)
+                out.putIfAbsent(clean.lowercase(), Interest(label, clean))
+            }
+        }
+        _history.value.take(60)
+            .filter { it.channelName.isNotBlank() }
+            .groupingBy { it.channelName }
+            .eachCount()
+            .filter { it.value >= 2 }
+            .entries.sortedByDescending { it.value }
+            .take(3)
+            .forEach { (name, _) -> out.putIfAbsent(name.lowercase(), Interest(name.take(24), name)) }
+        return out.values.take(max)
     }
 
     // ---------- Búsquedas recientes ----------
