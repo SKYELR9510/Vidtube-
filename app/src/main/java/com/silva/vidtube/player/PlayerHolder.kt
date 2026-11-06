@@ -61,6 +61,18 @@ object PlayerHolder {
                 if (isPlaying && !shortsMode && !PlaybackService.running) startService(appContext)
             }
         })
+        p.addAnalyticsListener(object : com.google.android.exoplayer2.analytics.AnalyticsListener {
+            override fun onLoadError(
+                eventTime: com.google.android.exoplayer2.analytics.AnalyticsListener.EventTime,
+                loadEventInfo: com.google.android.exoplayer2.source.LoadEventInfo,
+                mediaLoadData: com.google.android.exoplayer2.source.MediaLoadData,
+                error: java.io.IOException,
+                wasCanceled: Boolean,
+            ) {
+                lastLoadError = describe(error)
+                Log.w(TAG, "Error de carga: $lastLoadError", error)
+            }
+        })
         _player = p
         return p
     }
@@ -119,6 +131,8 @@ object PlayerHolder {
     }
 
     suspend fun play(context: Context, info: StreamInfo, quality: Int, startMs: Long) {
+        sourceMode = 0
+        lastLoadError = null
         val source = withContext(Dispatchers.IO) { buildSource(info, quality) }
         val p = player(context)
         shortsMode = false
@@ -154,9 +168,48 @@ object PlayerHolder {
         }.onFailure { Log.w(TAG, "No se pudo iniciar el servicio de reproducción", it) }
     }
 
+    private fun describe(e: Throwable): String {
+        var c: Throwable? = e
+        while (c != null) {
+            if (c is com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) {
+                return "HTTP ${c.responseCode}"
+            }
+            c = c.cause
+        }
+        return "${e.javaClass.simpleName}: ${e.message ?: ""}".take(120)
+    }
+
     // ------------------------------------------------------------------
     // Construcción de la fuente de medios (basado en el resolvedor de NewPipe)
     // ------------------------------------------------------------------
+
+    /**
+     * Modo de armado de la fuente:
+     * 0 = normal (video + audio por separado, con manifiesto DASH)
+     * 1 = video + audio por separado, como descarga directa (sin manifiesto)
+     * 2 = solo el formato con audio incluido (360p, el más compatible)
+     */
+    @Volatile
+    var sourceMode = 0
+        private set
+
+    /** Último error de red al cargar el video (para mostrarlo si no arranca). */
+    @Volatile
+    var lastLoadError: String? = null
+        private set
+
+    /** Prueba el siguiente modo de carga. Devuelve false si ya no quedan modos. */
+    suspend fun retryWithFallback(context: Context, info: StreamInfo, quality: Int): Boolean {
+        if (sourceMode >= 2) return false
+        sourceMode++
+        val source = withContext(Dispatchers.IO) { buildSource(info, quality) }
+        val p = player(context)
+        val pos = p.currentPosition
+        p.setMediaSource(source, pos)
+        p.prepare()
+        p.playWhenReady = true
+        return true
+    }
 
     private fun buildSource(info: StreamInfo, quality: Int): MediaSource {
         val type = info.streamType
@@ -172,7 +225,7 @@ object PlayerHolder {
             throw IllegalStateException("Esta transmisión en vivo no se puede reproducir")
         }
 
-        val video = pickVideoOnly(info.videoOnlyStreams, quality)
+        val video = if (sourceMode >= 2) null else pickVideoOnly(info.videoOnlyStreams, quality)
         val audio = pickAudio(info.audioStreams)
 
         if (video != null && audio != null) {
@@ -193,6 +246,10 @@ object PlayerHolder {
 
         if (audio != null) return youtubeSource(audio, info)
 
+        if (sourceMode >= 2 && info.hlsUrl.isEmpty()) {
+            val v = pickVideoOnly(info.videoOnlyStreams, quality)
+            if (v != null) return youtubeSource(v, info)
+        }
         if (info.hlsUrl.isNotEmpty()) {
             return HlsMediaSource.Factory(ytHls).createMediaSource(MediaItem.fromUri(info.hlsUrl))
         }
@@ -239,7 +296,7 @@ object PlayerHolder {
 
         return when (stream.deliveryMethod) {
             DeliveryMethod.PROGRESSIVE_HTTP -> {
-                if (isAdaptive && itag != null) {
+                if (isAdaptive && itag != null && sourceMode == 0) {
                     try {
                         val manifest = YoutubeProgressiveDashManifestCreator
                             .fromProgressiveStreamingUrl(stream.content, itag, info.duration)

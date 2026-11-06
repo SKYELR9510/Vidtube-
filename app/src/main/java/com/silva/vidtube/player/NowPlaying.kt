@@ -116,6 +116,7 @@ object NowPlaying {
                 val next = pickNext(info)
                 _upNext.value = next
                 PlayerHolder.play(appContext, info, quality, Library.position(full.url))
+                startStallWatch(appContext, info, quality)
                 autoFailures = 0
                 com.silva.vidtube.update.Updater.reportPlaybackResult(success = true, networkError = false)
                 releaseWakeLock()
@@ -183,6 +184,42 @@ object NowPlaying {
         val next = _upNext.value ?: return
         holdWakeLock(context)
         open(context, next, expand = false, auto = true)
+    }
+
+    private var stallJob: Job? = null
+
+    /**
+     * Si el video se queda "cargando" sin avanzar, probamos otra forma de cargarlo;
+     * si ninguna funciona, mostramos el error real en vez de girar para siempre.
+     */
+    private fun startStallWatch(context: Context, info: StreamInfo, quality: Int) {
+        stallJob?.cancel()
+        stallJob = scope.launch {
+            var stuck = 0
+            var lastPos = -1L
+            while (isActive) {
+                delay(1_000)
+                val p = PlayerHolder.playerOrNull ?: break
+                if (_state.value?.info !== info) break
+                val pos = p.currentPosition
+                val waiting = p.playWhenReady && p.playbackState == Player.STATE_BUFFERING
+                if (waiting && pos == lastPos) stuck++ else stuck = 0
+                lastPos = pos
+                if (stuck >= 12) {
+                    stuck = 0
+                    Log.w("Vidtube", "Video atascado (${PlayerHolder.lastLoadError}); probando otro modo")
+                    val retried = runCatching { PlayerHolder.retryWithFallback(context, info, quality) }
+                        .getOrDefault(false)
+                    if (!retried) {
+                        val detail = PlayerHolder.lastLoadError?.let { " ($it)" } ?: ""
+                        _state.value = _state.value?.copy(
+                            error = "El video no termina de cargar$detail. Revisa tu internet o prueba otra calidad."
+                        )
+                        break
+                    }
+                }
+            }
+        }
     }
 
     private fun prefetch(next: VideoItem?) {
@@ -265,6 +302,7 @@ object NowPlaying {
         saveCurrentPosition()
         loadJob?.cancel()
         saveJob?.cancel()
+        stallJob?.cancel()
         prefetchJob?.cancel()
         prefetched = null
         // Primero limpiamos el estado para que el aviso del reproductor no vuelva a llamar aquí
