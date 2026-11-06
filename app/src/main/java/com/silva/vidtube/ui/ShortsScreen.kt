@@ -84,7 +84,11 @@ class ShortsViewModel : ViewModel() {
     /** Info ya cargada de cada short (para que el siguiente empiece al instante). */
     private val cache = HashMap<String, StreamInfo>()
     private val pending = HashMap<String, kotlinx.coroutines.Deferred<StreamInfo?>>()
+    /** Shorts descartados (horizontales o que no cargan): no vuelven a aparecer. */
+    private val rejected = HashSet<String>()
     private var round = 0
+    private var current = 0
+    private var lastError: String? = null
 
     private fun topics(): List<String> {
         val interests = Library.interests(6).map { it.query }
@@ -98,6 +102,7 @@ class ShortsViewModel : ViewModel() {
     fun refresh() {
         items = emptyList()
         round = 0
+        current = 0
         cache.clear()
         pending.clear()
         loadMore()
@@ -112,35 +117,22 @@ class ShortsViewModel : ViewModel() {
             try {
                 val t = topics()
                 val subs = Library.subscriptions.value
+                val before = items.size
                 var tries = 0
-                var added = 0
                 // Si una ronda no trae nada nuevo, probamos con otros temas (hasta 3 veces)
-                while (added == 0 && tries < 3) {
+                while (items.size == before && tries < 3) {
                     tries++
                     val pickedTopics = List(2) { i -> t[(round * 2 + i) % t.size] }.distinct()
                     val pickedSubs = if (subs.isEmpty()) emptyList()
                     else List(minOf(3, subs.size)) { i -> subs[(round * 3 + i) % subs.size] }.distinct()
                     round++
-
-                    val results = (pickedTopics.map { q -> async { Repository.shortsSearch(q) } } +
-                        pickedSubs.map { ch -> async { Repository.channelShorts(ch) } }).awaitAll()
-
-                    // Intercalar las fuentes para que no salgan 10 seguidos del mismo
-                    val mixed = ArrayList<VideoItem>()
-                    val queues = results.map { ArrayDeque(it.shuffled()) }
-                    while (queues.any { it.isNotEmpty() }) {
-                        queues.forEach { q -> q.removeFirstOrNull()?.let { mixed += it } }
+                    // Cada fuente se agrega apenas llega: así el primer short sale antes
+                    kotlinx.coroutines.coroutineScope {
+                        pickedTopics.forEach { q -> launch { add(Repository.shortsSearch(q)) } }
+                        pickedSubs.forEach { ch -> launch { add(Repository.channelShorts(ch)) } }
                     }
-
-                    val seen = items.map { it.url }.toHashSet()
-                    val watched = Library.history.value.map { it.url }.toHashSet()
-                    val fresh = mixed.filter { seen.add(it.url) && it.url !in watched }
-                    items = items + fresh
-                    added = fresh.size
-                    // Los primeros se empiezan a cargar ya, antes de que se muestren
-                    if (items.size == fresh.size) prefetch(-1)
                 }
-                if (items.isEmpty()) error = "No se encontraron Shorts. Toca Reintentar."
+                if (items.isEmpty()) error = lastError ?: "No se encontraron Shorts. Toca Reintentar."
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 error = Paged.friendly(e)
@@ -150,30 +142,56 @@ class ShortsViewModel : ViewModel() {
         }
     }
 
+    private fun add(list: List<VideoItem>) {
+        val seen = items.map { it.url }.toHashSet()
+        val watched = Library.history.value.map { it.url }.toHashSet()
+        val fresh = list.shuffled().filter { seen.add(it.url) && it.url !in watched && it.url !in rejected }
+        if (fresh.isEmpty()) return
+        val wasEmpty = items.isEmpty()
+        items = items + fresh
+        // Los primeros se empiezan a cargar ya, antes de que se muestren
+        if (wasEmpty) prefetch(-1)
+    }
+
     fun remove(item: VideoItem) {
+        rejected += item.url
         items = items.filterNot { it.url == item.url }
-        if (items.size < 4) loadMore()
+        if (items.size - current < 5) loadMore()
+    }
+
+    private fun load(url: String) = viewModelScope.async {
+        runCatching { Repository.stream(url) }
+            .onFailure { lastError = Paged.friendly(it) }
+            .getOrNull()
     }
 
     suspend fun info(item: VideoItem): StreamInfo? {
         cache[item.url]?.let { return it }
-        val job = pending.getOrPut(item.url) {
-            viewModelScope.async { runCatching { Repository.stream(item.url) }.getOrNull() }
-        }
+        val job = pending.getOrPut(item.url) { load(item.url) }
         val info = job.await()
         if (info != null) cache[item.url] = info
         pending.remove(item.url)
         return info
     }
 
-    /** Carga por adelantado los próximos shorts. */
+    /** Carga por adelantado los próximos shorts y descarta los que no sirven antes de llegar a ellos. */
     fun prefetch(index: Int) {
-        items.drop(index + 1).take(3).forEach { v ->
+        current = index.coerceAtLeast(0)
+        items.drop(index + 1).take(4).forEach { v ->
             if (!cache.containsKey(v.url) && !pending.containsKey(v.url)) {
-                pending[v.url] = viewModelScope.async { runCatching { Repository.stream(v.url) }.getOrNull() }
+                val job = load(v.url)
+                pending[v.url] = job
+                viewModelScope.launch {
+                    val info = job.await()
+                    pending.remove(v.url)
+                    if (info != null) cache[v.url] = info
+                    val idx = items.indexOfFirst { it.url == v.url }
+                    // Solo quitamos los que aún no estás viendo
+                    if ((info == null || isLandscape(info)) && idx > current) remove(v)
+                }
             }
         }
-        if (index >= items.size - 4) loadMore()
+        if (index >= items.size - 5) loadMore()
     }
 }
 
@@ -221,11 +239,11 @@ fun ShortsScreen(
             playJob = scope.launch {
                 val info = vm.info(item)
                 when {
-                    // Videos horizontales que se colaron: se quitan y pasa el siguiente
-                    info != null && isLandscape(info) -> vm.remove(item)
-                    // No se pudo cargar: también se salta
+                    // No se pudo cargar: se salta (no vuelve a salir)
                     info == null -> vm.remove(item)
+                    // Si es horizontal igual se reproduce (ajustado a la pantalla), sin hacerte esperar
                     pager.currentPage == page -> runCatching { PlayerHolder.playShort(context, info) }
+                        .onFailure { vm.remove(item) }
                 }
                 loadingCurrent = false
             }
@@ -419,25 +437,28 @@ private fun ShortPage(
             if (meta.isNotBlank()) Text(meta, color = Color(0xFFDDDDDD), fontSize = 12.sp)
         }
 
-        if (ready) {
-            ShortProgressBar(Modifier.align(Alignment.BottomCenter))
+        // La barra se ve siempre en el short actual (en cero mientras carga)
+        if (isCurrent) {
+            ShortProgressBar(Modifier.align(Alignment.BottomCenter), active = ready)
         }
     }
 }
 
 /** Barra de progreso fina abajo, como en YouTube; se puede tocar o arrastrar para adelantar. */
 @Composable
-private fun ShortProgressBar(modifier: Modifier = Modifier) {
+private fun ShortProgressBar(modifier: Modifier = Modifier, active: Boolean = true) {
     var progress by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
     var widthPx by remember { mutableFloatStateOf(1f) }
+    val isActive by androidx.compose.runtime.rememberUpdatedState(active)
 
     LaunchedEffect(Unit) {
         while (true) {
             val p = PlayerHolder.playerOrNull
             val dur = p?.duration ?: 0L
-            if (p != null && dur > 0 && !dragging) {
+            if (!isActive) progress = 0f
+            else if (p != null && dur > 0 && !dragging) {
                 progress = (p.currentPosition.toFloat() / dur).coerceIn(0f, 1f)
             }
             delay(100)
@@ -476,7 +497,7 @@ private fun ShortProgressBar(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.BottomStart,
     ) {
         val barHeight = if (dragging) 6.dp else 3.dp
-        Box(Modifier.fillMaxWidth().height(barHeight).background(Color(0x55FFFFFF)))
+        Box(Modifier.fillMaxWidth().height(barHeight).background(Color(0x88FFFFFF)))
         Box(Modifier.fillMaxWidth(shown).height(barHeight).background(VColors.Red))
     }
 }

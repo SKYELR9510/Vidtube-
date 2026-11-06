@@ -144,12 +144,14 @@ object Repository {
                 runCatching { items = items + SearchInfo.getMoreItems(yt, handler, p).items }
             }
             // La búsqueda no siempre marca los shorts: aceptamos también videos de hasta 3 min
-            items.filterIsInstance<StreamInfoItem>()
-                .filter {
-                    it.streamType != org.schabi.newpipe.extractor.stream.StreamType.LIVE_STREAM &&
-                        (it.isShortFormContent || it.url.contains("/shorts/") || it.duration in 1..180)
-                }
-                .map { VideoItem.from(it).copy(isShort = true) }
+            val all = items.filterIsInstance<StreamInfoItem>()
+                .filter { it.streamType != org.schabi.newpipe.extractor.stream.StreamType.LIVE_STREAM }
+            // Primero los que YouTube marca como Short (son verticales seguro)
+            val real = all.filter { it.isShortFormContent || it.url.contains("/shorts/") }
+            // Si marca pocos, completamos con videos de hasta 1 min (casi siempre son shorts)
+            val chosen = if (real.size >= 6) real
+            else real + all.filter { it !in real && it.duration in 1..60 }
+            chosen.map { VideoItem.from(it).copy(isShort = true) }
         }.getOrDefault(emptyList())
     }
 
