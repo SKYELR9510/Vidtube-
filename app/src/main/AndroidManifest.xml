@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -63,6 +64,13 @@
             android:name=".download.DownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- Carátula para la pantalla de bloqueo y los controles del sistema -->
+        <provider
+            android:name=".player.CoverProvider"
+            android:authorities="${applicationId}.cover"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+
         <!-- Para instalar las actualizaciones descargadas -->
         <provider
             android:name="androidx.core.content.FileProvider"

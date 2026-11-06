@@ -55,6 +55,7 @@ class PlaybackService : Service() {
     // Carátula del video actual (miniatura)
     @Volatile private var artUrl: String? = null
     @Volatile private var artBitmap: Bitmap? = null
+    @Volatile private var artUri: android.net.Uri? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -226,6 +227,11 @@ class PlaybackService : Service() {
             }
             val art = artFor(video.thumbnail)
             if (art != null) {
+                artUri?.toString()?.let { uri ->
+                    b.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, uri)
+                    b.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, uri)
+                    b.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, uri)
+                }
                 b.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, art)
                 b.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, art)
                 b.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, art)
@@ -240,6 +246,7 @@ class PlaybackService : Service() {
         if (url == artUrl) return artBitmap
         artUrl = url
         artBitmap = null
+        artUri = null
         imageExecutor.execute {
             runCatching {
                 val request = okhttp3.Request.Builder().url(url).build()
@@ -251,6 +258,7 @@ class PlaybackService : Service() {
                     val square = Bitmap.createBitmap(raw, (raw.width - side) / 2, (raw.height - side) / 2, side, side)
                     val bmp = if (side > 512) Bitmap.createScaledBitmap(square, 512, 512, true) else square
                     if (artUrl == url) {
+                        artUri = runCatching { CoverProvider.save(this, url, bmp) }.getOrNull()
                         artBitmap = bmp
                         scope.launch {
                             connector?.invalidateMediaSessionMetadata()
