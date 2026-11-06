@@ -39,6 +39,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.mutableFloatStateOf
+import com.google.android.exoplayer2.Player
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -130,6 +137,8 @@ class ShortsViewModel : ViewModel() {
                     val fresh = mixed.filter { seen.add(it.url) && it.url !in watched }
                     items = items + fresh
                     added = fresh.size
+                    // Los primeros se empiezan a cargar ya, antes de que se muestren
+                    if (items.size == fresh.size) prefetch(-1)
                 }
                 if (items.isEmpty()) error = "No se encontraron Shorts. Toca Reintentar."
             } catch (e: Exception) {
@@ -188,6 +197,16 @@ fun ShortsScreen(
     var playing by remember { mutableStateOf(true) }
     var loadingCurrent by remember { mutableStateOf(false) }
     var playJob by remember { mutableStateOf<Job?>(null) }
+    var buffering by remember { mutableStateOf(false) }
+
+    // Ruedita también mientras el video se está cargando (no solo mientras se busca)
+    LaunchedEffect(Unit) {
+        while (true) {
+            val p = PlayerHolder.playerOrNull
+            buffering = p != null && p.playbackState == Player.STATE_BUFFERING
+            delay(150)
+        }
+    }
 
     // Cada vez que cambia el short visible, se reproduce ese
     LaunchedEffect(vm.items.isNotEmpty()) {
@@ -235,7 +254,8 @@ fun ShortsScreen(
                 ShortPage(
                     item = item,
                     isCurrent = isCurrent,
-                    loading = isCurrent && loadingCurrent,
+                    ready = isCurrent && !loadingCurrent,
+                    loading = isCurrent && (loadingCurrent || buffering),
                     paused = isCurrent && !playing,
                     onTogglePlay = {
                         val p = PlayerHolder.playerOrNull ?: return@ShortPage
@@ -287,6 +307,7 @@ private fun isLandscape(info: StreamInfo): Boolean {
 private fun ShortPage(
     item: VideoItem,
     isCurrent: Boolean,
+    ready: Boolean,
     loading: Boolean,
     paused: Boolean,
     onTogglePlay: () -> Unit,
@@ -302,7 +323,7 @@ private fun ShortPage(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
         )
-        if (isCurrent && !loading) {
+        if (isCurrent && ready) {
             PlayerSurface(Modifier.fillMaxSize(), useController = false)
         }
         if (loading) {
@@ -397,6 +418,66 @@ private fun ShortPage(
             val meta = joinDot(viewsText(item.views), item.uploaded)
             if (meta.isNotBlank()) Text(meta, color = Color(0xFFDDDDDD), fontSize = 12.sp)
         }
+
+        if (ready) {
+            ShortProgressBar(Modifier.align(Alignment.BottomCenter))
+        }
+    }
+}
+
+/** Barra de progreso fina abajo, como en YouTube; se puede tocar o arrastrar para adelantar. */
+@Composable
+private fun ShortProgressBar(modifier: Modifier = Modifier) {
+    var progress by remember { mutableFloatStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    var dragValue by remember { mutableFloatStateOf(0f) }
+    var widthPx by remember { mutableFloatStateOf(1f) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            val p = PlayerHolder.playerOrNull
+            val dur = p?.duration ?: 0L
+            if (p != null && dur > 0 && !dragging) {
+                progress = (p.currentPosition.toFloat() / dur).coerceIn(0f, 1f)
+            }
+            delay(100)
+        }
+    }
+
+    fun seekTo(fraction: Float) {
+        val p = PlayerHolder.playerOrNull ?: return
+        val dur = p.duration
+        if (dur > 0) p.seekTo((dur * fraction.coerceIn(0f, 1f)).toLong())
+    }
+
+    val shown = if (dragging) dragValue else progress
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(22.dp)
+            .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(Unit) {
+                detectTapGestures { off ->
+                    val f = off.x / widthPx
+                    progress = f.coerceIn(0f, 1f)
+                    seekTo(f)
+                }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { off -> dragging = true; dragValue = (off.x / widthPx).coerceIn(0f, 1f) },
+                    onDragEnd = { seekTo(dragValue); progress = dragValue; dragging = false },
+                    onDragCancel = { dragging = false },
+                    onHorizontalDrag = { change, _ ->
+                        dragValue = (change.position.x / widthPx).coerceIn(0f, 1f)
+                    },
+                )
+            },
+        contentAlignment = Alignment.BottomStart,
+    ) {
+        val barHeight = if (dragging) 6.dp else 3.dp
+        Box(Modifier.fillMaxWidth().height(barHeight).background(Color(0x55FFFFFF)))
+        Box(Modifier.fillMaxWidth(shown).height(barHeight).background(VColors.Red))
     }
 }
 

@@ -50,6 +50,12 @@ object PlayerHolder {
                 true
             )
             .setHandleAudioBecomingNoisy(true)
+            // Arranca apenas hay 1 s cargado (antes esperaba 2,5 s) y sigue llenando el búfer
+            .setLoadControl(
+                com.google.android.exoplayer2.DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(30_000, 60_000, 1_000, 2_500)
+                    .build()
+            )
             // Mantiene CPU y WiFi despiertos con la pantalla apagada mientras reproduce
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
@@ -111,6 +117,8 @@ object PlayerHolder {
 
     /** Reproduce un Short: en bucle, sin servicio en segundo plano. */
     suspend fun playShort(context: Context, info: StreamInfo) {
+        sourceMode = 0
+        lastLoadError = null
         val source = withContext(Dispatchers.IO) { buildSource(info, 720) }
         val p = player(context)
         shortsMode = true
