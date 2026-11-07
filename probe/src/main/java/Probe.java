@@ -25,7 +25,7 @@ public class Probe {
     }, new Localization("es", "PE"), new ContentCountry("PE"));
     StreamingService yt = ServiceList.YouTube;
     List<StreamInfoItem> shorts = new ArrayList<>();
-    for (String q : new String[]{"música #shorts", "humor #shorts", "shorts cumbia"}) {
+    for (String q : new String[]{"cumbia", "música #shorts"}) {
       try {
         SearchInfo info = SearchInfo.getInfo(yt, yt.getSearchQHFactory().fromQuery(q));
         int n = 0, flagged = 0, url = 0, d60 = 0, d180 = 0;
@@ -44,6 +44,7 @@ public class Probe {
     }
     try {
       ChannelInfo ch = ChannelInfo.getInfo(yt, "https://www.youtube.com/@LasEstrellasDeLaCumbia");
+      System.out.println("CHANNEL " + ch.getName() + " tabs=" + ch.getTabs().stream().map(t -> t.getContentFilters().toString()).toList());
       for (ListLinkHandler t : ch.getTabs()) {
         if (t.getContentFilters().contains(ChannelTabs.SHORTS)) {
           ChannelTabInfo ti = ChannelTabInfo.getInfo(yt, t);
@@ -52,6 +53,38 @@ public class Probe {
         }
       }
     } catch (Exception e) { System.out.println("CHANNEL ERROR " + e); }
+    for (String params : new String[]{"EgIQCQ%3D%3D", "EgIQCQ=="}) {
+      for (String q : new String[]{"cumbia", "humor"}) {
+        String body = "{\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20251105.01.00\",\"hl\":\"es\",\"gl\":\"PE\"}},\"query\":\"" + q + "\",\"params\":\"" + java.net.URLDecoder.decode(params, "UTF-8") + "\"}";
+        okhttp3.Request rq = new okhttp3.Request.Builder().url("https://www.youtube.com/youtubei/v1/search?prettyPrint=false")
+          .post(okhttp3.RequestBody.create(body, okhttp3.MediaType.get("application/json")))
+          .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0").build();
+        try (okhttp3.Response rs = c.newCall(rq).execute()) {
+          String js = rs.body().string();
+          java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"reelWatchEndpoint\":\\{\"videoId\":\"([\\w-]{11})").matcher(js);
+          Set<String> ids = new LinkedHashSet<>(); while (m.find()) ids.add(m.group(1));
+          Map<String,Integer> keys = new TreeMap<>();
+          java.util.regex.Matcher k = java.util.regex.Pattern.compile("\"(\\w+(Renderer|ViewModel))\"").matcher(js);
+          while (k.find()) keys.merge(k.group(1), 1, Integer::sum);
+          System.out.println("RAW[" + q + "] http=" + rs.code() + " len=" + js.length() + " reelIds=" + ids.size() + " " + ids);
+          System.out.println("   keys=" + keys);
+          if (!ids.isEmpty()) {
+            String id = ids.iterator().next();
+            int at = js.indexOf(id);
+            System.out.println("   ctx=" + js.substring(Math.max(0, at - 1500), Math.min(js.length(), at + 300)).replaceAll("\\s+"," "));
+            shorts.add(null);
+            try {
+              StreamInfo si = StreamInfo.getInfo(yt, "https://www.youtube.com/shorts/" + id);
+              VideoStream best = null;
+              for (VideoStream v : si.getVideoOnlyStreams()) if (best == null || v.getHeight() > best.getHeight()) best = v;
+              System.out.println("STREAM ok " + id + " " + si.getName() + " videoOnly=" + si.getVideoOnlyStreams().size() + " best=" + (best == null ? "-" : best.getWidth() + "x" + best.getHeight()));
+            } catch (Exception e) { System.out.println("STREAM ERROR " + id + " " + e); }
+          }
+        }
+      }
+      break;
+    }
+    shorts.removeIf(Objects::isNull);
     for (StreamInfoItem s : shorts.subList(0, Math.min(3, shorts.size()))) {
       try {
         StreamInfo si = StreamInfo.getInfo(yt, s.getUrl());
