@@ -136,23 +136,8 @@ object Repository {
     // ---------- Shorts ----------
     /** Shorts sobre un tema (búsqueda con #shorts). */
     suspend fun shortsSearch(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
-        runCatching {
-            val handler = yt.searchQHFactory.fromQuery("$query #shorts")
-            val info = SearchInfo.getInfo(yt, handler)
-            var items = info.relatedItems
-            info.nextPage?.takeIf { Page.isValid(it) }?.let { p ->
-                runCatching { items = items + SearchInfo.getMoreItems(yt, handler, p).items }
-            }
-            // La búsqueda no siempre marca los shorts: aceptamos también videos de hasta 3 min
-            val all = items.filterIsInstance<StreamInfoItem>()
-                .filter { it.streamType != org.schabi.newpipe.extractor.stream.StreamType.LIVE_STREAM }
-            // Primero los que YouTube marca como Short (son verticales seguro)
-            val real = all.filter { it.isShortFormContent || it.url.contains("/shorts/") }
-            // Si marca pocos, completamos con videos de hasta 1 min (casi siempre son shorts)
-            val chosen = if (real.size >= 6) real
-            else real + all.filter { it !in real && it.duration in 1..60 }
-            chosen.map { VideoItem.from(it).copy(isShort = true) }
-        }.getOrDefault(emptyList())
+        // Búsqueda con el filtro "Shorts" de YouTube (trae shorts verdaderos, verticales)
+        ShortsSearch.search(query)
     }
 
     /** Últimos shorts de un canal (pestaña Shorts del canal). */

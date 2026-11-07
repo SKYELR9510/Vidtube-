@@ -128,7 +128,13 @@ class ShortsViewModel : ViewModel() {
                     round++
                     // Cada fuente se agrega apenas llega: así el primer short sale antes
                     kotlinx.coroutines.coroutineScope {
-                        pickedTopics.forEach { q -> launch { add(Repository.shortsSearch(q)) } }
+                        pickedTopics.forEach { q ->
+                            launch {
+                                runCatching { Repository.shortsSearch(q) }
+                                    .onSuccess { add(it) }
+                                    .onFailure { lastError = Paged.friendly(it) }
+                            }
+                        }
                         pickedSubs.forEach { ch -> launch { add(Repository.channelShorts(ch)) } }
                     }
                 }
@@ -169,9 +175,26 @@ class ShortsViewModel : ViewModel() {
         cache[item.url]?.let { return it }
         val job = pending.getOrPut(item.url) { load(item.url) }
         val info = job.await()
-        if (info != null) cache[item.url] = info
+        if (info != null) { cache[item.url] = info; enrich(item.url, info) }
         pending.remove(item.url)
         return info
+    }
+
+    /** Los shorts de la búsqueda no traen el canal: lo completamos al cargar el video. */
+    private fun enrich(url: String, info: StreamInfo) {
+        val cur = items.firstOrNull { it.url == url } ?: return
+        if (cur.channelName.isNotBlank()) return
+        val full = VideoItem.from(info)
+        items = items.map {
+            if (it.url == url) it.copy(
+                channelName = full.channelName,
+                channelUrl = full.channelUrl,
+                channelAvatar = full.channelAvatar,
+                title = full.title.ifBlank { it.title },
+                views = if (full.views > 0) full.views else it.views,
+                uploaded = if (full.views > 0) full.uploaded else it.uploaded,
+            ) else it
+        }
     }
 
     /** Carga por adelantado los próximos shorts y descarta los que no sirven antes de llegar a ellos. */
@@ -184,7 +207,7 @@ class ShortsViewModel : ViewModel() {
                 viewModelScope.launch {
                     val info = job.await()
                     pending.remove(v.url)
-                    if (info != null) cache[v.url] = info
+                    if (info != null) { cache[v.url] = info; enrich(v.url, info) }
                     val idx = items.indexOfFirst { it.url == v.url }
                     // Solo quitamos los que aún no estás viendo
                     if ((info == null || isLandscape(info)) && idx > current) remove(v)
