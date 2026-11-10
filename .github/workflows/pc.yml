@@ -63,7 +63,11 @@ jobs:
       - run: npm run build
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb > /dev/null
       - run: VIDTUBE_SHOTS=$PWD/shots timeout 240 xvfb-run -a -s "-screen 0 1440x900x24" npx electron . --no-sandbox || true
-      - uses: actions/upload-artifact@v4
+      - name: Subir capturas (release de pruebas, no es una versión)
+        uses: softprops/action-gh-release@v2
         with:
-          name: capturas
-          path: pc/shots
+          tag_name: pc-capturas
+          name: Capturas de prueba (PC)
+          prerelease: true
+          make_latest: "false"
+          files: pc/shots/*
