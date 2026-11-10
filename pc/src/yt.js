@@ -362,8 +362,19 @@ async function buildDash(sd, seconds, pot) {
   const def = audio.filter((f) => !f.audio_track || f.audio_track.audio_is_default);
   if (def.length) audio = def;
   if (!video.length || !audio.length) return null;
+  let nChecked = false;
   const url = async (f) => {
     let u = await f.decipher(player);
+    if (!nChecked) {
+      nChecked = true;
+      // Revisión: el parámetro "n" debe cambiar al descifrar; si no cambia, YouTube corta el video
+      try {
+        const raw = f.url || new URLSearchParams(f.signature_cipher || f.cipher || '').get('url') || '';
+        const before = raw ? new URL(raw).searchParams.get('n') : null;
+        const after = new URL(u).searchParams.get('n');
+        log('n descifrado:', before && after && before !== after ? 'sí' : `NO (${before} → ${after})`);
+      } catch (e) { log('n revisión falló', e.message); }
+    }
     if (pot) u += (u.includes('?') ? '&' : '?') + 'pot=' + encodeURIComponent(pot);
     return u;
   };
