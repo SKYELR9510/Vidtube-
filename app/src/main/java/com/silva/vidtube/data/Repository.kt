@@ -141,14 +141,14 @@ object Repository {
     }
 
     /** Últimos shorts de un canal (pestaña Shorts del canal). */
-    suspend fun channelShorts(channel: ChannelItem): List<VideoItem> = withContext(Dispatchers.IO) {
+    suspend fun channelShorts(channel: ChannelItem, limit: Int = 8): List<VideoItem> = withContext(Dispatchers.IO) {
         runCatching {
             val info = ChannelInfo.getInfo(yt, channel.url)
             val tab = info.tabs.firstOrNull { it.contentFilters.contains(ChannelTabs.SHORTS) }
                 ?: return@runCatching emptyList()
             ChannelTabInfo.getInfo(yt, tab).relatedItems
                 .filterIsInstance<StreamInfoItem>()
-                .take(8)
+                .take(limit)
                 .map {
                     VideoItem.from(it).copy(
                         isShort = true,
