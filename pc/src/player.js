@@ -304,7 +304,7 @@ export function createPlayer(host, opts = {}) {
       const next = (src?.pos ?? -1) + 1;
       // Si falló el video con este cliente, probamos el siguiente
       if (e?.code && src && next < 5 && attempt < 4) {
-        YT.debug.push(`shaka ${e.code} con ${src.client}; probando otro`);
+        YT.debug.push(`shaka ${e.code} con ${src.client} (HTTP ${e?.data?.[1] ?? '?'}); probando otro`);
         return loadInner(id, info, next);
       }
       root.classList.remove('loading');
