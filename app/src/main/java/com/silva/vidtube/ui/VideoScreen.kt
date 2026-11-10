@@ -1,5 +1,8 @@
 package com.silva.vidtube.ui
 
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -97,6 +100,9 @@ import com.silva.vidtube.player.PlayerHolder
 import org.schabi.newpipe.extractor.stream.Description
 import org.schabi.newpipe.extractor.stream.StreamInfo
 
+/** Hoja de calidad: se abre desde el ⚙ del reproductor o desde la fila de acciones. */
+private val qualitySheet = mutableStateOf(false)
+
 fun Context.findActivity(): Activity? {
     var c = this
     while (c is ContextWrapper) {
@@ -157,35 +163,32 @@ fun VideoScreen(
         if (fullscreen) toggleFullscreen() else NowPlaying.minimize()
     }
 
+    val upNext by NowPlaying.upNext.collectAsState()
+    val badge = if (state.qualities.isNotEmpty()) qualityBadge(state.quality) else null
+    val onQuality: (() -> Unit)? = if (state.qualities.isNotEmpty() && !state.video.isLive) ({ qualitySheet.value = true }) else null
+
     if (fullscreen) {
         var zoom by rememberSaveable { mutableStateOf(false) }
+        // Modo cine: solo el video y los controles flotantes
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            PlayerSurface(
-                Modifier.fillMaxSize(),
+            PlayerSurface(Modifier.fillMaxSize(), useController = false, zoom = zoom)
+            PlayerControls(
+                fullscreen = true,
+                title = state.video.title,
+                qualityLabel = badge,
+                onClose = { toggleFullscreen() },
                 onFullscreen = { toggleFullscreen() },
+                onQuality = onQuality,
+                onPrevious = { NowPlaying.playPrevious(context) },
+                onNext = if (upNext != null) ({ NowPlaying.playNext(context) }) else null,
                 zoom = zoom,
-                onZoomChange = { zoom = it },
+                onZoom = { zoom = it },
+                modifier = Modifier.fillMaxSize(),
             )
-            Row(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0x99000000))
-                    .clickable { zoom = !zoom }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    if (zoom) Icons.Outlined.ZoomInMap else Icons.Outlined.ZoomOutMap,
-                    null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(if (zoom) "Ajustar" else "Llenar pantalla", color = Color.White, fontSize = 12.sp)
-            }
+            val err = playerState.error
+            if (err != null && !state.loading) ErrorOverlay(err) { NowPlaying.retry(context) }
         }
+        if (qualitySheet.value) QualitySheet(state)
         return
     }
 
@@ -196,13 +199,18 @@ fun VideoScreen(
             .statusBarsPadding()
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black)) {
-            PlayerSurface(Modifier.fillMaxSize(), onFullscreen = { toggleFullscreen() })
-            IconButton(
-                onClick = { NowPlaying.minimize() },
-                modifier = Modifier.align(Alignment.TopStart),
-            ) {
-                Icon(Icons.Outlined.KeyboardArrowDown, "Minimizar", tint = Color.White)
-            }
+            PlayerSurface(Modifier.fillMaxSize(), useController = false)
+            PlayerControls(
+                fullscreen = false,
+                title = state.video.title,
+                qualityLabel = badge,
+                onClose = { NowPlaying.minimize() },
+                onFullscreen = { toggleFullscreen() },
+                onQuality = onQuality,
+                onPrevious = { NowPlaying.playPrevious(context) },
+                onNext = if (upNext != null) ({ NowPlaying.playNext(context) }) else null,
+                modifier = Modifier.fillMaxSize(),
+            )
             val err = playerState.error
             if (err != null && !state.loading) {
                 ErrorOverlay(err) { NowPlaying.retry(context) }
@@ -238,7 +246,6 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
     val video = state.video
     var showDescription by remember { mutableStateOf(false) }
     var showComments by remember { mutableStateOf(false) }
-    var showQuality by remember { mutableStateOf(false) }
     var showDownload by remember { mutableStateOf(false) }
     val settings by Library.settings.collectAsState()
     val upNext by NowPlaying.upNext.collectAsState()
@@ -278,7 +285,7 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
                     video.title,
                     color = VColors.Text,
                     fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     lineHeight = 24.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -293,7 +300,12 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
         }
         item("channel") {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                Modifier
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(VColors.Card)
+                    .padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
@@ -303,7 +315,7 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
                         .clickable(enabled = channel.url.isNotEmpty()) { onChannel(channel.url) },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Avatar(channel.avatar, channel.name, 36.dp)
+                    Avatar(channel.avatar, channel.name, 42.dp)
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text(
@@ -322,12 +334,56 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
             }
         }
         item("actions") {
+            val likedList by Library.liked.collectAsState()
+            val liked = likedList.any { it.url == video.url }
+            var disliked by remember(video.url) { mutableStateOf(false) }
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (info.likeCount >= 0) {
-                    item { ActionChip(compactNumber(info.likeCount), Icons.Outlined.ThumbUp) {} }
+                item {
+                    // Me gusta | No me gusta en una sola píldora
+                    Row(
+                        Modifier.clip(RoundedCornerShape(50)).background(VColors.Chip),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(
+                            Modifier.clickable {
+                                val added = Library.toggleLike(video)
+                                if (added) disliked = false
+                                Toast.makeText(
+                                    context,
+                                    if (added) "Agregado a Videos que me gustan" else "Quitado de Videos que me gustan",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }.padding(start = 14.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                if (liked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp, "Me gusta",
+                                tint = if (liked) VColors.Red else VColors.Text, modifier = Modifier.size(18.dp),
+                            )
+                            if (info.likeCount >= 0) {
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    compactNumber(info.likeCount + if (liked) 1 else 0),
+                                    color = VColors.Text, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
+                        Box(Modifier.width(1.dp).height(20.dp).background(VColors.Divider))
+                        Box(
+                            Modifier.clickable {
+                                disliked = !disliked
+                                if (disliked && liked) Library.toggleLike(video)
+                            }.padding(start = 10.dp, end = 14.dp, top = 8.dp, bottom = 8.dp)
+                        ) {
+                            Icon(
+                                if (disliked) Icons.Filled.ThumbDown else Icons.Outlined.ThumbDown, "No me gusta",
+                                tint = if (disliked) VColors.Red else VColors.Text, modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
                 }
                 item {
                     ActionChip("Compartir", Icons.Outlined.Share) { shareUrl(context, video.title, video.url) }
@@ -337,7 +393,7 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
                 }
                 item {
                     ActionChip(
-                        if (saved) "Guardado" else "Ver más tarde",
+                        if (saved) "Guardado" else "Guardar",
                         if (saved) Icons.Outlined.BookmarkAdded else Icons.Outlined.BookmarkBorder,
                     ) {
                         val added = Library.toggleWatchLater(video)
@@ -350,7 +406,7 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
                 }
                 if (state.qualities.isNotEmpty() && !video.isLive) {
                     item {
-                        ActionChip("Calidad ${state.quality}p", Icons.Outlined.Settings) { showQuality = true }
+                        ActionChip("Calidad ${state.quality}p", Icons.Outlined.Settings) { qualitySheet.value = true }
                     }
                 }
             }
@@ -463,9 +519,15 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
             }
         }
     }
-    if (showQuality) {
+    if (qualitySheet.value) QualitySheet(state)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QualitySheet(state: NowPlaying.State) {
+    val context = LocalContext.current
         ModalBottomSheet(
-            onDismissRequest = { showQuality = false },
+            onDismissRequest = { qualitySheet.value = false },
             containerColor = VColors.Surface,
         ) {
             Column(Modifier.padding(bottom = 24.dp)) {
@@ -482,7 +544,7 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
                             .fillMaxWidth()
                             .clickable {
                                 NowPlaying.setQuality(context, q)
-                                showQuality = false
+                                qualitySheet.value = false
                             }
                             .padding(horizontal = 20.dp, vertical = 14.dp),
                     ) {
@@ -496,7 +558,6 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
             }
         }
     }
-}
 
 private fun compactSubs(n: Long) = if (n < 0) "" else compactNumber(n) + " suscriptores"
 
@@ -506,10 +567,10 @@ private fun CommentsTeaser(comments: List<Comment>?, count: Int, onClick: () -> 
         Modifier
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(VColors.Chip)
+            .clip(RoundedCornerShape(16.dp))
+            .background(VColors.Card)
             .clickable(onClick = onClick)
-            .padding(12.dp)
+            .padding(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Comentarios", color = VColors.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)

@@ -3,6 +3,10 @@ package com.silva.vidtube.ui
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -406,6 +410,13 @@ private fun ShortPage(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            val likedList by Library.liked.collectAsState()
+            val liked = likedList.any { it.url == item.url }
+            ShortAction(
+                if (liked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                "Me gusta",
+                tint = if (liked) VColors.Red else Color.White,
+            ) { Library.toggleLike(item) }
             ShortAction(Icons.Outlined.Share, "Compartir") { shareUrl(context, item.title, item.url) }
             ShortAction(Icons.Outlined.BookmarkBorder, "Guardar") {
                 val added = Library.toggleWatchLater(item)
@@ -526,15 +537,21 @@ private fun ShortProgressBar(modifier: Modifier = Modifier, active: Boolean = tr
 }
 
 @Composable
-private fun ShortAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+private fun ShortAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color = Color.White,
+    onClick: () -> Unit,
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
         Box(
             Modifier
                 .size(46.dp)
-                .background(Color(0x55000000), shape = androidx.compose.foundation.shape.CircleShape),
+                .background(Color(0x40FFFFFF), shape = androidx.compose.foundation.shape.CircleShape)
+                .border(1.dp, Color(0x55FFFFFF), androidx.compose.foundation.shape.CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, label, tint = Color.White, modifier = Modifier.size(26.dp))
+            Icon(icon, label, tint = tint, modifier = Modifier.size(26.dp))
         }
         Text(label, color = Color.White, fontSize = 11.sp)
     }

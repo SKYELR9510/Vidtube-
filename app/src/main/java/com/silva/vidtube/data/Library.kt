@@ -21,6 +21,10 @@ object Library {
     private val _watchLater = MutableStateFlow<List<VideoItem>>(emptyList())
     val watchLater: StateFlow<List<VideoItem>> = _watchLater.asStateFlow()
 
+    private val _liked = MutableStateFlow<List<VideoItem>>(emptyList())
+    /** Videos que me gustan (botón 👍 del reproductor). */
+    val liked: StateFlow<List<VideoItem>> = _liked.asStateFlow()
+
     private val _settings = MutableStateFlow(Settings())
     val settings: StateFlow<Settings> = _settings.asStateFlow()
 
@@ -47,6 +51,7 @@ object Library {
         _subscriptions.value = readArray("subscriptions").map { ChannelItem.fromJson(it) }
         _history.value = readArray("history").map { VideoItem.fromJson(it) }
         _watchLater.value = readArray("watch_later").map { VideoItem.fromJson(it) }
+        _liked.value = readArray("liked").map { VideoItem.fromJson(it) }
         _searches.value = runCatching {
             val arr = JSONArray(prefs.getString("searches", "[]") ?: "[]")
             (0 until arr.length()).map { arr.getString(it) }
@@ -188,6 +193,15 @@ object Library {
         _watchLater.value = if (added) listOf(video) + _watchLater.value
         else _watchLater.value.filterNot { it.url == video.url }
         writeArray("watch_later", _watchLater.value.map { it.toJson() })
+        return added
+    }
+
+    fun isLiked(url: String) = _liked.value.any { it.url == url }
+
+    fun toggleLike(video: VideoItem): Boolean {
+        val added = !isLiked(video.url)
+        _liked.value = if (added) listOf(video) + _liked.value else _liked.value.filterNot { it.url == video.url }
+        writeArray("liked", _liked.value.map { it.toJson() })
         return added
     }
 

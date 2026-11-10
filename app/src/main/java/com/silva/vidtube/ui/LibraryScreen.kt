@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -126,6 +127,8 @@ fun LibraryScreen(
             Spacer(Modifier.height(16.dp))
             MenuRow(Icons.Outlined.History, "Historial", "${history.size} videos") { onOpenList("history") }
             MenuRow(Icons.Outlined.Schedule, "Ver más tarde", "${later.size} videos") { onOpenList("later") }
+            val liked by Library.liked.collectAsState()
+            MenuRow(Icons.Outlined.ThumbUp, "Videos que me gustan", "${liked.size} videos") { onOpenList("liked") }
             MenuRow(Icons.Outlined.Download, "Descargas", "${downloads.size} archivos · se guardan en Descargas/Vidtube") {
                 onOpenList("downloads")
             }
@@ -212,14 +215,25 @@ fun VideoListScreen(
     onChannel: (String) -> Unit,
 ) {
     val isHistory = kind == "history"
-    val list by (if (isHistory) Library.history else Library.watchLater).collectAsState()
+    val isLiked = kind == "liked"
+    val list by (when {
+        isHistory -> Library.history
+        isLiked -> Library.liked
+        else -> Library.watchLater
+    }).collectAsState()
     Column(Modifier.fillMaxSize().background(VColors.Background)) {
-        VTopBar(title = if (isHistory) "Historial" else "Ver más tarde", onBack = onBack)
+        VTopBar(
+            title = when { isHistory -> "Historial"; isLiked -> "Videos que me gustan"; else -> "Ver más tarde" },
+            onBack = onBack,
+        )
         if (list.isEmpty()) {
             EmptyView(
-                if (isHistory) "Tu historial está vacío" else "No hay videos guardados",
-                if (isHistory) "Los videos que veas aparecerán aquí."
-                else "Usa el menú ⋮ de un video y elige \"Guardar en Ver más tarde\".",
+                when { isHistory -> "Tu historial está vacío"; isLiked -> "Aún no hay videos aquí"; else -> "No hay videos guardados" },
+                when {
+                    isHistory -> "Los videos que veas aparecerán aquí."
+                    isLiked -> "Toca 👍 en un video para guardarlo aquí."
+                    else -> "Usa el menú ⋮ de un video y elige \"Guardar en Ver más tarde\"."
+                },
             )
         } else {
             LazyColumn(Modifier.fillMaxSize()) {
@@ -229,7 +243,11 @@ fun VideoListScreen(
                         onClick = { onVideo(v) },
                         onChannel = onChannel,
                         onRemove = {
-                            if (isHistory) Library.removeFromHistory(v.url) else Library.toggleWatchLater(v)
+                            when {
+                                isHistory -> Library.removeFromHistory(v.url)
+                                isLiked -> Library.toggleLike(v)
+                                else -> Library.toggleWatchLater(v)
+                            }
                         },
                     )
                 }
