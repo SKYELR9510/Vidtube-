@@ -316,7 +316,7 @@ export function createPlayer(host, opts = {}) {
     // Si estamos cambiando de "cliente" por un error, seguimos desde el mismo segundo
     const same = current?.id === id;
     const resumeAt = same ? (video.currentTime || current.lastTime || 0) : 0;
-    current = { id, info, lastTime: resumeAt, retriedAt: same ? current.retriedAt : 0, startedAt: same ? current.startedAt : undefined };
+    current = { id, info, lastTime: resumeAt, retriedAt: same ? current.retriedAt : 0, startedAt: same ? current.startedAt : undefined, mediaRetry: same ? current.mediaRetry : false };
     $('.vp-error').classList.remove('on');
     root.classList.add('loading');
     subsOn = false; $('.vp-cc').classList.remove('on');
@@ -332,8 +332,15 @@ export function createPlayer(host, opts = {}) {
     } catch (e) {
       if (destroyed || current?.id !== id) return;
       const next = (src?.pos ?? -1) + 1;
-      // Si falló el video con este cliente, probamos el siguiente
-      if (e?.code && src && next < 5 && attempt < 4) {
+      // Error al leer el video (no es culpa del cliente): reintentamos el mismo una vez
+      if (e?.category === 3 && src && !current.mediaRetry) {
+        current.mediaRetry = true;
+        YT.debug.push(`shaka ${e.code} con ${src.client}; reintento el mismo`);
+        await new Promise((r) => setTimeout(r, 800));
+        return loadInner(id, info, src.pos ?? attempt);
+      }
+      // Si YouTube rechazó el video con este cliente, probamos el siguiente
+      if (e?.code && e?.category !== 3 && src && next < 5 && attempt < 4) {
         YT.debug.push(`shaka ${e.code} con ${src.client} (HTTP ${e?.data?.[1] ?? '?'}); probando otro`);
         return loadInner(id, info, next);
       }
@@ -343,7 +350,10 @@ export function createPlayer(host, opts = {}) {
       const el = $('.vp-error');
       const why = e?.code === 1001 || e?.code === 1002
         ? `YouTube no entregó el video (código ${e.code}). Prueba Reintentar; si sigue, revisa Configuración › Diagnóstico.`
-        : e?.code ? `Error del reproductor (código ${e.code}).` : (e?.message || 'Error desconocido');
+        : e?.code ? `Error del reproductor (código ${e.code}). Toca Reintentar.`
+        : /no eres un bot/i.test(e?.message || '')
+          ? 'YouTube pidió confirmar que no eres un bot, normalmente por muchos intentos seguidos desde tu conexión. Espera unos minutos y toca Reintentar.'
+          : (e?.message || 'Error desconocido');
       el.innerHTML = `<div><b>No se pudo reproducir</b><pre>${why.replace(/</g, '&lt;')}</pre><button class="btn-red">Reintentar</button></div>`;
       el.classList.add('on');
       el.querySelector('button').onclick = () => load(id, info, 0);
