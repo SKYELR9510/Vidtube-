@@ -67,6 +67,8 @@ async function go(name, params = {}, push = true) {
   view.scrollTop = 0;
   view.innerHTML = '';
   view.className = 'view-' + name;
+  // Al ver un video la barra lateral se achica para que el reproductor sea más grande
+  app.classList.toggle('compact', name === 'watch');
   const fn = routes[name];
   try { cleanup = (await fn(view, params)) || null; }
   catch (e) { view.innerHTML = errorBox(e, () => go(name, params, false)); bindRetry(() => go(name, params, false)); }

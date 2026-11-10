@@ -392,18 +392,19 @@ async function buildDash(sd, seconds, pot) {
  * Busca una forma de reproducir el video probando varios "clientes" de YouTube
  * (como hace la app de Android). Devuelve la fuente para el reproductor.
  */
-let preferred = Number(localStorage.getItem('vt_client2') || 0) || 0;
+let preferred = Math.min(2, Number(localStorage.getItem('vt_client3') || 0) || 0);
 /** El cliente que reprodujo bien queda primero para los siguientes videos. */
 export function rememberClient(index) {
   if (index == null || index === preferred) return;
   preferred = index;
-  try { localStorage.setItem('vt_client2', String(index)); } catch {}
+  try { localStorage.setItem('vt_client3', String(index)); } catch {}
   log('cliente preferido ahora', index);
 }
 
 export async function playable(id, seconds, attempt = 0) {
   await init();
-  const base = ['MWEB', 'WEB', 'ANDROID_VR', 'TV', 'IOS'];
+  // ANDROID_VR e iOS se cortan a los pocos segundos en conexiones normales: solo clientes web
+  const base = ['MWEB', 'WEB', 'TV'];
   const order = [base[preferred], ...base.filter((_, i) => i !== preferred)];
   const errors = [];
   for (const client of order.slice(attempt)) {

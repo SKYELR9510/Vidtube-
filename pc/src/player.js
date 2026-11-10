@@ -176,7 +176,7 @@ export function createPlayer(host, opts = {}) {
     if (video.buffered.length && d) $('.vp-buf').style.width = (video.buffered.end(video.buffered.length - 1) / d) * 100 + '%';
     if (current && d && !src?.live && Math.floor(video.currentTime) % 5 === 0) savePosition(current.id, video.currentTime, d);
     if (current) current.lastTime = video.currentTime;
-    if (src && !src.remembered && current && video.currentTime - (current.startedAt ?? video.currentTime) > 20) {
+    if (src && !src.remembered && current && video.currentTime - (current.startedAt ?? video.currentTime) > 60) {
       src.remembered = true;
       YT.rememberClient(src.index);
     }
@@ -284,11 +284,13 @@ export function createPlayer(host, opts = {}) {
       if (destroyed || current?.id !== id) return;
       const next = (src?.pos ?? -1) + 1;
       // Si falló el video con este cliente, probamos el siguiente
-      if (e?.code && src && next < 5 && attempt < 4) {
+      if (e?.code && src && next < 3 && attempt < 2) {
         YT.debug.push(`shaka ${e.code} con ${src.client}; probando otro`);
         return loadInner(id, info, next);
       }
       root.classList.remove('loading');
+      src = null;
+      try { await player.unload(); } catch {}
       const el = $('.vp-error');
       const why = e?.code === 1001 || e?.code === 1002
         ? `YouTube no entregó el video (código ${e.code}). Prueba Reintentar; si sigue, revisa Configuración › Diagnóstico.`
@@ -300,9 +302,12 @@ export function createPlayer(host, opts = {}) {
   }
   player.addEventListener('error', (ev) => {
     const err = ev.detail;
-    if (!current || busy) return;
-    const next = (src?.pos ?? -1) + 1;
-    if (next < 5) { YT.debug.push(`shaka error ${err?.code} con ${src?.client}`); load(current.id, current.info, next); }
+    if (!current || busy || !src) return;
+    const next = (src.pos ?? -1) + 1;
+    const failed = src.client;
+    src = null;
+    YT.debug.push(`shaka error ${err?.code} con ${failed}`);
+    if (next < 3) load(current.id, current.info, next);
   });
 
   function setCinema({ title, subtitle, actions }) {
