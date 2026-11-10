@@ -108,7 +108,15 @@ fun VidtubeRoot(isInPip: Boolean) {
                     if (current != null && !expanded && !onShorts) MiniPlayer(current)
                     val route = nav.currentBackStackEntryAsState().value?.destination?.route
                     VBottomBar(route) { r ->
-                        // Inicio: volver directo (si no, se restauraba la pantalla abierta encima, p. ej. Configuración)
+                        // Primero cerramos las pantallas abiertas encima (Configuración, canal, búsqueda…),
+                        // así no quedan guardadas dentro de la pestaña y no "reaparecen" al tocarla
+                        val tabRoutes = navTabs.map { it.route }
+                        while (nav.currentBackStackEntry?.destination?.route !in tabRoutes &&
+                            nav.previousBackStackEntry != null
+                        ) {
+                            if (!nav.popBackStack()) break
+                        }
+                        if (nav.currentBackStackEntry?.destination?.route == r) return@VBottomBar
                         if (r == "home") {
                             if (!nav.popBackStack("home", inclusive = false)) nav.navigate("home")
                             return@VBottomBar
