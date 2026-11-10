@@ -180,7 +180,7 @@ fun HomeScreen(
         }
         val showTip = vm.selected == "todo" && Library.subscriptions.value.isEmpty() && Library.history.value.size < 3
         // Destacado + fila de Tendencias arriba (cuando ya hay suficientes videos)
-        val videos = paged.items.filterIsInstance<FeedEntry.Video>()
+        val videos = paged.items.filterIsInstance<FeedEntry.Video>().map { it.video }
         val featured = paged.items.size >= 12 && paged.items.take(9).all { it is FeedEntry.Video }
         val tip: LazyListScope.() -> Unit = {
             if (showTip) {
