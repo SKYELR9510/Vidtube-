@@ -71,7 +71,8 @@ fun PlayerSurface(
                 setShowPreviousButton(false)
                 setShowShuffleButton(false)
                 setShowSubtitleButton(false)
-                setShowBuffering(StyledPlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                // La ruedita la dibujan nuestros controles (si no, salían dos girando)
+                setShowBuffering(StyledPlayerView.SHOW_BUFFERING_NEVER)
                 keepScreenOn = true
                 this.useController = useController
                 this.player = player
