@@ -87,8 +87,10 @@ export function createPlayer(host, opts = {}) {
     req.body = new Uint8Array([0x78, 0]).buffer;
   });
   player.configure({
-    streaming: { bufferingGoal: 45, rebufferingGoal: 1.5, retryParameters: { maxAttempts: 3 } },
-    abr: { enabled: true },
+    // Búfer moderado: con videos 4K uno grande llena la memoria del reproductor (error 3014)
+    streaming: { bufferingGoal: 30, bufferBehind: 20, rebufferingGoal: 1.5, retryParameters: { maxAttempts: 4 } },
+    // En automático no pasa del tamaño real de la ventana
+    abr: { enabled: true, restrictToElementSize: true },
     preferredTextLanguage: 'es',
   });
 
@@ -285,8 +287,9 @@ export function createPlayer(host, opts = {}) {
   }
   async function loadInner(id, info, attempt) {
     // Si estamos cambiando de "cliente" por un error, seguimos desde el mismo segundo
-    const resumeAt = attempt > 0 && current?.id === id ? (video.currentTime || current.lastTime || 0) : 0;
-    current = { id, info, lastTime: resumeAt };
+    const same = current?.id === id;
+    const resumeAt = same ? (video.currentTime || current.lastTime || 0) : 0;
+    current = { id, info, lastTime: resumeAt, retriedAt: same ? current.retriedAt : 0, startedAt: same ? current.startedAt : undefined };
     $('.vp-error').classList.remove('on');
     root.classList.add('loading');
     subsOn = false; $('.vp-cc').classList.remove('on');
@@ -294,7 +297,7 @@ export function createPlayer(host, opts = {}) {
       src = await YT.playable(id, info.seconds, attempt);
       if (destroyed || current?.id !== id) return;
       await player.unload();
-      const start = src.live ? 0 : attempt === 0 ? position(id) : resumeAt;
+      const start = src.live ? 0 : resumeAt || (attempt === 0 ? position(id) : 0);
       await player.load(src.src, start || undefined, src.progressive ? 'video/mp4' : undefined);
       applyQuality();
       updateBadge();
@@ -322,12 +325,24 @@ export function createPlayer(host, opts = {}) {
   player.addEventListener('error', (ev) => {
     const err = ev.detail;
     if (!current || busy || !src) return;
-    const next = (src.pos ?? -1) + 1;
     const failed = src.client;
-    src = null;
     const d = err?.data || [];
     const at = Math.round(video.currentTime || 0);
-    YT.debug.push(`shaka error ${err?.code} con ${failed} (HTTP ${d[1] ?? '?'}, seg ${at}s, pot=${String(d[0] || '').includes('pot=') ? 'sí' : 'no'})`);
+    const status = typeof d[1] === 'number' ? d[1] : '?';
+    YT.debug.push(`shaka error ${err?.code} con ${failed} (HTTP ${status}, seg ${at}s)`);
+    // Si este cliente ya venía funcionando, se reintenta el mismo desde el mismo segundo
+    // (memoria llena, enlace vencido, corte de red). Solo se cambia de cliente si falla enseguida.
+    const playedOk = at - (current.startedAt ?? at) > 20;
+    const now = Date.now();
+    if (playedOk && (!current.retriedAt || now - current.retriedAt > 30000)) {
+      current.retriedAt = now;
+      const same = src.pos ?? 0;
+      src = null;
+      load(current.id, current.info, same);
+      return;
+    }
+    const next = (src.pos ?? -1) + 1;
+    src = null;
     if (next < 5) load(current.id, current.info, next);
   });
 
