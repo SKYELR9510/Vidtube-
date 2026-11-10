@@ -1,6 +1,7 @@
 // Motor de YouTube: búsqueda, canales, info de videos y fuentes de reproducción.
 import { Innertube, Platform, UniversalCache } from 'youtubei.js/web';
-import { BG } from 'bgutils-js';
+import { getChallenge, BotGuardClient } from 'bgutils-js/botguard';
+import { WebPoMinter } from 'bgutils-js/webpo';
 
 // Descifrado de firmas: YouTube.js nos pasa el código del reproductor y lo ejecutamos aquí
 Platform.shim.eval = async (data, env) => {
@@ -40,20 +41,34 @@ export function init() {
 
 // ---------- Token de "no soy un bot" (BotGuard), igual que en la app de Android ----------
 const potCache = new Map();
-async function mintPot(identifier) {
-  if (potCache.has(identifier)) return potCache.get(identifier);
-  const bgConfig = {
-    fetch: (u, o) => fetch(u, o),
-    globalObj: window,
-    identifier,
-    requestKey: 'O43z0dpjhgX20SCx4KAo',
-  };
-  const challenge = await BG.Challenge.create(bgConfig);
-  if (!challenge) throw new Error('sin desafío BotGuard');
+const REQUEST_KEY = 'O43z0dpjhgX20SCx4KAo';
+const GOOG_KEY = 'AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw';
+let minterPromise = null;
+async function getMinter() {
+  const challenge = await getChallenge({ requestKey: REQUEST_KEY, fetchFunction: (u, o) => fetch(u, o), useYouTubeAPI: true });
   const js = challenge.interpreterJavascript?.privateDoNotAccessOrElseSafeScriptWrappedValue;
   if (js) new Function(js)();
-  const result = await BG.PoToken.generate({ program: challenge.program, globalName: challenge.globalName, bgConfig });
-  const pot = result?.poToken;
+  else if (challenge.interpreterUrl?.privateDoNotAccessOrElseTrustedResourceUrlWrappedValue) {
+    const url = challenge.interpreterUrl.privateDoNotAccessOrElseTrustedResourceUrlWrappedValue;
+    new Function(await (await fetch(url.startsWith('//') ? 'https:' + url : url)).text())();
+  }
+  const bg = await BotGuardClient.create({ program: challenge.program, globalName: challenge.globalName, globalObj: window });
+  const webPoSignalOutput = [];
+  const botguardResponse = await bg.snapshot({ webPoSignalOutput });
+  const r = await fetch('https://www.youtube.com/api/jnn/v1/GenerateIT', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json+protobuf', 'x-goog-api-key': GOOG_KEY },
+    body: JSON.stringify([REQUEST_KEY, botguardResponse]),
+  });
+  const it = await r.json();
+  if (!it?.[0]) throw new Error('sin token de integridad');
+  return WebPoMinter.create({ integrityToken: it[0], estimatedTtlSecs: it[1], mintRefreshThreshold: it[2], websafeFallbackToken: it[3] }, webPoSignalOutput);
+}
+async function mintPot(identifier) {
+  if (potCache.has(identifier)) return potCache.get(identifier);
+  if (!minterPromise) minterPromise = getMinter().catch((e) => { minterPromise = null; throw e; });
+  const minter = await minterPromise;
+  const pot = await minter.mintAsWebsafeString(identifier);
   if (pot) potCache.set(identifier, pot);
   return pot;
 }
