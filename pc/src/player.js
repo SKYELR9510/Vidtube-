@@ -303,7 +303,7 @@ export function createPlayer(host, opts = {}) {
       if (destroyed || current?.id !== id) return;
       const next = (src?.pos ?? -1) + 1;
       // Si falló el video con este cliente, probamos el siguiente
-      if (e?.code && src && next < 4 && attempt < 3) {
+      if (e?.code && src && next < 5 && attempt < 4) {
         YT.debug.push(`shaka ${e.code} con ${src.client}; probando otro`);
         return loadInner(id, info, next);
       }
@@ -328,7 +328,7 @@ export function createPlayer(host, opts = {}) {
     const d = err?.data || [];
     const at = Math.round(video.currentTime || 0);
     YT.debug.push(`shaka error ${err?.code} con ${failed} (HTTP ${d[1] ?? '?'}, seg ${at}s, pot=${String(d[0] || '').includes('pot=') ? 'sí' : 'no'})`);
-    if (next < 4) load(current.id, current.info, next);
+    if (next < 5) load(current.id, current.info, next);
   });
 
   function setCinema({ title, subtitle, actions }) {

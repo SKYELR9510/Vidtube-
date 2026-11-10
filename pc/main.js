@@ -12,6 +12,7 @@ app.userAgentFallback = app.userAgentFallback
 const UA = {
   ANDROID_VR: 'com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip',
   IOS: 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
+  MWEB: 'Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)',
 };
 
 function createWindow() {
@@ -106,6 +107,7 @@ app.whenReady().then(() => {
     if (details.url.includes('googlevideo.com')) {
       if (/[?&]c=ANDROID_VR/.test(details.url)) h['User-Agent'] = UA.ANDROID_VR;
       else if (/[?&]c=IOS/.test(details.url)) h['User-Agent'] = UA.IOS;
+      else if (/[?&]c=MWEB/.test(details.url)) h['User-Agent'] = UA.MWEB;
     }
     callback({ requestHeaders: h });
   });

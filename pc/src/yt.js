@@ -410,12 +410,12 @@ async function buildDash(sd, seconds, pot) {
  * Busca una forma de reproducir el video probando varios "clientes" de YouTube
  * (como hace la app de Android). Devuelve la fuente para el reproductor.
  */
-let preferred = Math.min(3, Number(localStorage.getItem('vt_client4') || 0) || 0);
+let preferred = Math.min(4, Number(localStorage.getItem('vt_client5') || 0) || 0);
 /** El cliente que reprodujo bien queda primero para los siguientes videos. */
 export function rememberClient(index) {
   if (index == null || index === preferred) return;
   preferred = index;
-  try { localStorage.setItem('vt_client4', String(index)); } catch {}
+  try { localStorage.setItem('vt_client5', String(index)); } catch {}
   log('cliente preferido ahora', index);
 }
 
@@ -423,7 +423,7 @@ export async function playable(id, seconds, attempt = 0) {
   await init();
   // ANDROID_VR e iOS se cortan a los pocos segundos en conexiones normales: solo clientes web
   // MWEB con el token ligado al video o a la sesión (YouTube cambia cuál pide); luego TV y WEB
-  const base = ['MWEB:video', 'MWEB:sesion', 'TV:video', 'WEB:video'];
+  const base = ['MWEB:video', 'WEB_EMBEDDED:video', 'MWEB:sesion', 'TV:video', 'WEB:video'];
   const order = [base[preferred], ...base.filter((_, i) => i !== preferred)];
   const errors = [];
   for (const entry of order.slice(attempt)) {
@@ -432,7 +432,7 @@ export async function playable(id, seconds, attempt = 0) {
       // Token del reproductor (ligado al video) y token de descarga (ligado a la sesión)
       let pot = null;
       let gvsPot = null;
-      if (client === 'WEB' || client === 'MWEB' || client === 'TV') {
+      if (client !== 'ANDROID_VR' && client !== 'IOS') {
         try { pot = await mintPot(id); } catch (e) { log('token falló', e.message); }
         const visitor = yt.session.context.client.visitorData;
         if (binding === 'sesion') { try { gvsPot = visitor ? await mintPot(visitor) : pot; } catch (e) { gvsPot = pot; } }

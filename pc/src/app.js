@@ -572,7 +572,7 @@ const routes = {
   async settings(v) {
     const s = store.settings;
     const sw = (key, on) => `<label class="switch"><input type="checkbox" data-k="${key}" ${on ? 'checked' : ''}><i></i></label>`;
-    v.innerHTML = `
+    v.innerHTML = `<div class="settings-wrap">
       <h1 class="page-title">Configuración</h1>
       <div class="set-group"><h4>Apariencia</h4><div class="card-bg">
         <div class="set-row"><span class="tile">${icon('sun', 22)}</span><div><b>Modo claro</b><span>${s.light ? 'Activado' : 'Desactivado · la app usa el modo oscuro'}</span></div>${sw('light', s.light)}</div>
@@ -591,7 +591,7 @@ const routes = {
         <div class="set-row"><span class="tile">${icon('info', 22)}</span><div><b>Vidtube para PC</b><span>Versión ${esc(VERSION)} · Funciona con YouTube.js · Atajos: espacio, ← →, F, M, C</span></div></div>
         <button class="set-row dbg"><span class="tile">${icon('bug', 22)}</span><div><b>Diagnóstico</b><span>Registro para revisar problemas de reproducción</span></div>${icon('chevron', 22)}</button>
         <pre class="dbg-log"></pre>
-      </div></div>`;
+      </div></div></div>`;
     v.querySelectorAll('input[data-k]').forEach((i) => i.onchange = () => { setSettings({ [i.dataset.k]: i.checked }); if (i.dataset.k === 'light') go('settings', {}, false); });
     v.querySelector('select').onchange = (e) => setSettings({ quality: e.target.value });
     v.querySelector('.clear').onclick = () => { if (confirm('¿Borrar historial? Se borrarán los videos vistos, las búsquedas y las posiciones.')) { clearHistory(); toast('Historial borrado'); } };
