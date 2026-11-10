@@ -426,7 +426,7 @@ private fun ShortPage(
                     Toast.LENGTH_SHORT,
                 ).show()
             }
-            ShortAction(Icons.Outlined.Download, "Descargar", onDownload)
+            ShortAction(Icons.Outlined.Download, "Descargar", onClick = onDownload)
         }
 
         // Canal y título abajo
