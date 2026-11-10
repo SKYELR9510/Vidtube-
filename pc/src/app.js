@@ -26,7 +26,7 @@ onChange(applyTheme);
 // ---------- Estructura ----------
 app.innerHTML = `
   <aside class="side">
-    <div class="side-logo"><img class="logo" alt="Vidtube"></div>
+    <div class="side-logo"><img class="logo" alt="Vidtube"><img class="mark" src="assets/mark.png" alt="Vidtube"></div>
     <nav>
       <button data-go="home">${icon('home')}<span>Inicio</span></button>
       <button data-go="shorts">${icon('bolt')}<span>Shorts</span></button>
