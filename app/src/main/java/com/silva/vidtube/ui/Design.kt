@@ -205,16 +205,16 @@ fun HeroCard(video: VideoItem, onPlay: () -> Unit, onChannel: (String) -> Unit) 
         Thumbnail(video, Modifier.fillMaxSize())
         Box(
             Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0.35f to Color.Transparent, 1f to Color(0xEE000000))
+                Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color(0x33000000), 0.6f to Color(0xCC000000), 1f to Color(0xF2000000))
             )
         )
         Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
             Text(
                 video.title,
                 color = Color.White,
-                fontSize = 21.sp,
+                fontSize = 19.sp,
                 fontWeight = FontWeight.ExtraBold,
-                lineHeight = 25.sp,
+                lineHeight = 23.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )

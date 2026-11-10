@@ -313,7 +313,13 @@ fun SubscribeButton(channel: ChannelItem, modifier: Modifier = Modifier) {
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
         modifier = modifier.height(36.dp),
     ) {
-        Text(if (subscribed) "Suscrito" else "Suscribirse", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            if (subscribed) "Suscrito" else "Suscribirse",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 

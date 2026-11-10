@@ -88,19 +88,12 @@ fun LibraryScreen(
             TopIcon(Icons.Outlined.Settings, "Configuración", onSettings)
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Avatar(null, "Tú", 64.dp)
-                Spacer(Modifier.width(16.dp))
-                Column {
-                    Text("Tu biblioteca", color = VColors.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text(
-                        "${subs.size} suscripciones · sin anuncios · todo guardado en tu celular",
-                        color = VColors.Secondary,
-                        fontSize = 12.sp,
-                    )
-                }
-            }
-
+            Text(
+                "${subs.size} suscripciones · sin anuncios · todo guardado en tu celular",
+                color = VColors.Secondary,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
             SectionHeader("Historial", if (history.isNotEmpty()) ({ onOpenList("history") }) else null)
             if (history.isEmpty()) {
                 Text(

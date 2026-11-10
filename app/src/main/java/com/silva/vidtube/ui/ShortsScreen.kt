@@ -426,7 +426,7 @@ private fun ShortPage(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(
-                    Modifier.clickable(enabled = item.channelUrl != null) { item.channelUrl?.let(onChannel) },
+                    Modifier.weight(1f, fill = false).clickable(enabled = item.channelUrl != null) { item.channelUrl?.let(onChannel) },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Avatar(item.channelAvatar, item.channelName, 32.dp)
