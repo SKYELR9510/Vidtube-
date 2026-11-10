@@ -399,22 +399,24 @@ async function buildDash(sd, seconds, pot) {
  * Busca una forma de reproducir el video probando varios "clientes" de YouTube
  * (como hace la app de Android). Devuelve la fuente para el reproductor.
  */
-let preferred = Math.min(2, Number(localStorage.getItem('vt_client3') || 0) || 0);
+let preferred = Math.min(3, Number(localStorage.getItem('vt_client4') || 0) || 0);
 /** El cliente que reprodujo bien queda primero para los siguientes videos. */
 export function rememberClient(index) {
   if (index == null || index === preferred) return;
   preferred = index;
-  try { localStorage.setItem('vt_client3', String(index)); } catch {}
+  try { localStorage.setItem('vt_client4', String(index)); } catch {}
   log('cliente preferido ahora', index);
 }
 
 export async function playable(id, seconds, attempt = 0) {
   await init();
   // ANDROID_VR e iOS se cortan a los pocos segundos en conexiones normales: solo clientes web
-  const base = ['MWEB', 'WEB', 'TV'];
+  // MWEB con el token ligado al video o a la sesión (YouTube cambia cuál pide); luego TV y WEB
+  const base = ['MWEB:video', 'MWEB:sesion', 'TV:video', 'WEB:video'];
   const order = [base[preferred], ...base.filter((_, i) => i !== preferred)];
   const errors = [];
-  for (const client of order.slice(attempt)) {
+  for (const entry of order.slice(attempt)) {
+    const [client, binding] = entry.split(':');
     try {
       // Token del reproductor (ligado al video) y token de descarga (ligado a la sesión)
       let pot = null;
@@ -422,7 +424,8 @@ export async function playable(id, seconds, attempt = 0) {
       if (client === 'WEB' || client === 'MWEB' || client === 'TV') {
         try { pot = await mintPot(id); } catch (e) { log('token falló', e.message); }
         const visitor = yt.session.context.client.visitorData;
-        try { gvsPot = visitor ? await mintPot(visitor) : pot; } catch (e) { gvsPot = pot; }
+        if (binding === 'sesion') { try { gvsPot = visitor ? await mintPot(visitor) : pot; } catch (e) { gvsPot = pot; } }
+        else gvsPot = pot;
       }
       const b = await yt.getBasicInfo(id, pot ? { client, po_token: pot } : { client });
       const st = b.playability_status?.status;
@@ -437,13 +440,13 @@ export async function playable(id, seconds, attempt = 0) {
       }));
       if (b.basic_info?.is_live || (!sd.adaptive_formats?.length && (sd.hls_manifest_url || sd.dash_manifest_url))) {
         const live = sd.hls_manifest_url || sd.dash_manifest_url;
-        if (live) { log('reproduciendo con', client, '(en vivo)'); return { src: live, client, live: true, captions, index: base.indexOf(client), pos: order.indexOf(client) }; }
+        if (live) { log('reproduciendo con', client, '(en vivo)'); return { src: live, live: true, captions, index: base.indexOf(entry), pos: order.indexOf(entry), client: entry }; }
       }
       const dash = await buildDash(sd, seconds, gvsPot || pot);
-      if (dash) { log('reproduciendo con', client); return { src: dash, client, captions, index: base.indexOf(client), pos: order.indexOf(client) }; }
-      if (sd.hls_manifest_url) return { src: sd.hls_manifest_url, client, captions, index: base.indexOf(client), pos: order.indexOf(client) };
+      if (dash) { log('reproduciendo con', entry); return { src: dash, captions, index: base.indexOf(entry), pos: order.indexOf(entry), client: entry }; }
+      if (sd.hls_manifest_url) return { src: sd.hls_manifest_url, captions, index: base.indexOf(entry), pos: order.indexOf(entry), client: entry };
       const muxed = (sd.formats || [])[0];
-      if (muxed) return { src: await muxed.decipher(yt.session.player), client, progressive: true, captions, index: base.indexOf(client), pos: order.indexOf(client) };
+      if (muxed) return { src: await muxed.decipher(yt.session.player), client, progressive: true, captions, index: base.indexOf(entry), pos: order.indexOf(entry), client: entry };
       errors.push(`${client}: sin formatos`);
     } catch (e) {
       errors.push(`${client}: ${e.message}`);
