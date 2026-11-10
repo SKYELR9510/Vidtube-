@@ -24,11 +24,14 @@ fun FeedList(
     emptyTitle: String = "No hay nada por aquí",
     emptySubtitle: String = "",
     header: (LazyListScope.() -> Unit)? = null,
+    /** Cuántos de los primeros elementos ya se muestran en el encabezado (destacado, tendencias). */
+    skip: Int = 0,
 ) {
     LazyColumn(modifier.fillMaxSize(), state = state) {
         header?.invoke(this)
         val items = paged.items
-        itemsIndexed(items, key = { _, e -> e.key }) { index, entry ->
+        itemsIndexed(items.drop(skip), key = { _, e -> e.key }) { i, entry ->
+            val index = i + skip
             if (index >= items.size - 4 && paged.canLoadMore) {
                 LaunchedEffect(items.size) { paged.loadMore() }
             }

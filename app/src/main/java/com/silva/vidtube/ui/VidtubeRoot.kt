@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -44,15 +45,6 @@ import com.silva.vidtube.data.VideoItem
 import com.silva.vidtube.player.NowPlaying
 import kotlinx.coroutines.flow.MutableStateFlow
 
-private data class Tab(val route: String, val label: String, val selected: ImageVector, val normal: ImageVector)
-
-private val tabs = listOf(
-    Tab("home", "Inicio", Icons.Filled.Home, Icons.Outlined.Home),
-    Tab("shorts", "Shorts", Icons.Filled.Slideshow, Icons.Outlined.Slideshow),
-    Tab("subs", "Suscripciones", Icons.Filled.Subscriptions, Icons.Outlined.Subscriptions),
-    Tab("library", "Tú", Icons.Filled.VideoLibrary, Icons.Outlined.VideoLibrary),
-)
-
 /** Canal pendiente de abrir (por ejemplo desde un link compartido). */
 val pendingChannel = MutableStateFlow<String?>(null)
 
@@ -67,6 +59,14 @@ fun VidtubeRoot(isInPip: Boolean) {
     val expanded by NowPlaying.expanded.collectAsState()
     val channelToOpen by pendingChannel.collectAsState()
     val routeToOpen by pendingRoute.collectAsState()
+    var showSplash by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(!splashShown) }
+    LaunchedEffect(Unit) {
+        if (showSplash) {
+            kotlinx.coroutines.delay(1400)
+            splashShown = true
+            showSplash = false
+        }
+    }
 
     LaunchedEffect(routeToOpen) {
         val route = routeToOpen ?: return@LaunchedEffect
@@ -95,6 +95,7 @@ fun VidtubeRoot(isInPip: Boolean) {
         nav.navigate("channel/" + Uri.encode(url))
     }
     val openSearch: () -> Unit = { nav.navigate("search") { launchSingleTop = true } }
+    val openSettings: () -> Unit = { nav.navigate("settings") { launchSingleTop = true } }
 
     Box(Modifier.fillMaxSize().background(VColors.Background)) {
         Scaffold(
@@ -105,12 +106,19 @@ fun VidtubeRoot(isInPip: Boolean) {
                     val current = now
                     val onShorts = nav.currentBackStackEntryAsState().value?.destination?.route == "shorts"
                     if (current != null && !expanded && !onShorts) MiniPlayer(current)
-                    BottomBar(nav)
+                    val route = nav.currentBackStackEntryAsState().value?.destination?.route
+                    VBottomBar(route) { r ->
+                        nav.navigate(r) {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
                 }
             },
         ) { padding ->
             NavHost(nav, startDestination = "home", modifier = Modifier.padding(padding)) {
-                composable("home") { HomeScreen(openVideo, openChannel, openSearch) }
+                composable("home") { HomeScreen(openVideo, openChannel, openSearch, openSettings) }
                 composable("shorts") { ShortsScreen(onChannel = openChannel) }
                 composable("subs") { SubscriptionsScreen(openVideo, openChannel, openSearch) }
                 composable("library") {
@@ -118,7 +126,11 @@ fun VidtubeRoot(isInPip: Boolean) {
                         openVideo,
                         onOpenList = { if (it == "downloads") nav.navigate("downloads") else nav.navigate("list/$it") },
                         onSearch = openSearch,
+                        onSettings = openSettings,
                     )
+                }
+                composable("settings") {
+                    SettingsScreen(onBack = { nav.popBackStack() }, onDownloads = { nav.navigate("downloads") })
                 }
                 composable("search") {
                     SearchScreen(onBack = { nav.popBackStack() }, onVideo = openVideo, onChannel = openChannel)
@@ -147,36 +159,15 @@ fun VidtubeRoot(isInPip: Boolean) {
             val current = now
             if (current != null) VideoScreen(current, onChannel = openChannel)
         }
+
+        // Bienvenida al abrir la app
+        AnimatedVisibility(
+            visible = showSplash,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(450)),
+        ) { SplashScreen() }
     }
 }
 
-@Composable
-private fun BottomBar(nav: NavHostController) {
-    val entry by nav.currentBackStackEntryAsState()
-    val route = entry?.destination?.route
-    NavigationBar(containerColor = VColors.Background, tonalElevation = androidx.compose.ui.unit.Dp(0f)) {
-        tabs.forEach { tab ->
-            val selected = route == tab.route
-            NavigationBarItem(
-                selected = selected,
-                onClick = {
-                    nav.navigate(tab.route) {
-                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { Icon(if (selected) tab.selected else tab.normal, tab.label) },
-                label = { Text(tab.label, fontSize = 11.sp) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = VColors.Text,
-                    selectedTextColor = VColors.Text,
-                    unselectedIconColor = VColors.Text,
-                    unselectedTextColor = VColors.Text,
-                    indicatorColor = Color.Transparent,
-                ),
-            )
-        }
-    }
-}
-
+/** La bienvenida se muestra una sola vez por apertura de la app. */
+private var splashShown = false

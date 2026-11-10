@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
             storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
 
+        com.silva.vidtube.ui.lightTheme.value = Library.settings.value.lightMode
         setContent {
             VidtubeTheme {
                 VidtubeRoot(isInPip = inPip.value)

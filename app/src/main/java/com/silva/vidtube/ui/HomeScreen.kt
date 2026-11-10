@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -134,6 +135,7 @@ fun HomeScreen(
     onVideo: (VideoItem) -> Unit,
     onChannel: (String) -> Unit,
     onSearch: () -> Unit,
+    onSettings: () -> Unit,
     vm: HomeViewModel = viewModel(),
 ) {
     LaunchedEffect(Unit) { vm.chips = buildHomeChips() }
@@ -149,9 +151,8 @@ fun HomeScreen(
 
     Column(Modifier.fillMaxSize().background(VColors.Background)) {
         VTopBar(leading = { VidtubeLogo() }) {
-            IconButton(onClick = onSearch) {
-                Icon(Icons.Outlined.Search, "Buscar", tint = VColors.Text)
-            }
+            TopIcon(Icons.Outlined.Search, "Buscar", onSearch)
+            TopIcon(Icons.Outlined.Settings, "Configuración", onSettings)
         }
         UpdateBanner()
         LazyRow(
@@ -163,30 +164,45 @@ fun HomeScreen(
                 val sel = chip.id == vm.selected
                 Text(
                     chip.label,
-                    color = if (sel) Color.Black else VColors.Text,
+                    color = if (sel) Color.White else VColors.Text,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (sel) VColors.ChipSelected else VColors.Chip)
+                        .clip(RoundedCornerShape(50))
+                        .then(
+                            if (sel) Modifier.background(VColors.RedGradient)
+                            else Modifier.background(VColors.Chip)
+                        )
                         .clickable { vm.selected = chip.id }
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                        .padding(horizontal = 16.dp, vertical = 7.dp),
                 )
             }
         }
-        val tip: (LazyListScope.() -> Unit)? =
-            if (vm.selected == "todo" && Library.subscriptions.value.isEmpty() && Library.history.value.size < 3) {
-                {
-                    item("tip") {
-                        Text(
-                            "Mira algunos videos y suscríbete a canales: el Inicio se irá ajustando a tus gustos.",
-                            color = VColors.Secondary,
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        )
-                    }
+        val showTip = vm.selected == "todo" && Library.subscriptions.value.isEmpty() && Library.history.value.size < 3
+        // Destacado + fila de Tendencias arriba (cuando ya hay suficientes videos)
+        val videos = paged.items.filterIsInstance<FeedEntry.Video>()
+        val featured = paged.items.size >= 12 && paged.items.take(9).all { it is FeedEntry.Video }
+        val tip: LazyListScope.() -> Unit = {
+            if (showTip) {
+                item("tip") {
+                    Text(
+                        "Mira algunos videos y suscríbete a canales: el Inicio se irá ajustando a tus gustos.",
+                        color = VColors.Secondary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
                 }
-            } else null
+            }
+            if (featured) {
+                val hero = videos[0]
+                item("hero") { HeroCard(hero, onPlay = { onVideo(hero) }, onChannel = onChannel) }
+                item("shelf_title") {
+                    SectionTitle(if (vm.selected == "todo") "Tendencias para ti" else "Lo más visto")
+                }
+                item("shelf") { VideoShelf(videos.subList(1, 9), onVideo) }
+                item("feed_title") { SectionTitle("Más videos") }
+            }
+        }
         PullToRefreshBox(
             isRefreshing = paged.refreshing,
             onRefresh = { paged.refresh() },
@@ -201,6 +217,7 @@ fun HomeScreen(
                     emptyTitle = "Nada por aquí todavía",
                     emptySubtitle = "Desliza hacia abajo para recargar.",
                     header = tip,
+                    skip = if (featured) 9 else 0,
                 )
             }
         }

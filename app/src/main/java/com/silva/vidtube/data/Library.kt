@@ -38,6 +38,8 @@ object Library {
         val pictureInPicture: Boolean = true,
         val saveHistory: Boolean = true,
         val autoplay: Boolean = true,
+        /** Modo claro opcional (por defecto la app es oscura). */
+        val lightMode: Boolean = false,
     )
 
     fun init(context: Context) {
@@ -55,6 +57,7 @@ object Library {
             pictureInPicture = prefs.getBoolean("pip", true),
             saveHistory = prefs.getBoolean("save_history", true),
             autoplay = prefs.getBoolean("autoplay", true),
+            lightMode = prefs.getBoolean("light_mode", false),
         )
         recommendationBatches = runCatching {
             val arr = JSONArray(prefs.getString("recommendations", "[]") ?: "[]")
@@ -211,6 +214,7 @@ object Library {
             .putBoolean("pip", s.pictureInPicture)
             .putBoolean("save_history", s.saveHistory)
             .putBoolean("autoplay", s.autoplay)
+            .putBoolean("light_mode", s.lightMode)
             .apply()
     }
 

@@ -82,8 +82,8 @@ fun VTopBar(
             Text(
                 title,
                 color = VColors.Text,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 21.sp,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 4.dp),
@@ -165,8 +165,12 @@ fun VideoCard(
             .fillMaxWidth()
             .clickable(onClick = onClick)
     ) {
-        Thumbnail(video, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
-        Row(Modifier.padding(start = 12.dp, top = 12.dp, end = 0.dp, bottom = 20.dp)) {
+        Thumbnail(
+            video,
+            Modifier.padding(horizontal = 12.dp).fillMaxWidth().aspectRatio(16f / 9f),
+            rounded = 14.dp,
+        )
+        Row(Modifier.padding(start = 14.dp, top = 10.dp, end = 0.dp, bottom = 18.dp)) {
             if (showChannelAvatar) {
                 Avatar(
                     video.channelAvatar,
@@ -183,6 +187,7 @@ fun VideoCard(
                     video.title,
                     color = VColors.Text,
                     fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
                     lineHeight = 20.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -302,13 +307,13 @@ fun SubscribeButton(channel: ChannelItem, modifier: Modifier = Modifier) {
     Button(
         onClick = { Library.toggleSubscription(channel) },
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (subscribed) VColors.Chip else VColors.ChipSelected,
-            contentColor = if (subscribed) VColors.Text else Color.Black,
+            containerColor = if (subscribed) VColors.Chip else VColors.Red,
+            contentColor = if (subscribed) VColors.Text else Color.White,
         ),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
         modifier = modifier.height(36.dp),
     ) {
-        Text(if (subscribed) "Suscrito" else "Suscribirse", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text(if (subscribed) "Suscrito" else "Suscribirse", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
