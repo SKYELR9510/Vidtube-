@@ -1,5 +1,8 @@
 package com.silva.vidtube.ui
 
+import androidx.compose.material.icons.automirrored.outlined.PlaylistAddCheck
+import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
+import androidx.compose.foundation.border
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
@@ -100,6 +103,14 @@ import com.silva.vidtube.player.PlayerHolder
 import org.schabi.newpipe.extractor.stream.Description
 import org.schabi.newpipe.extractor.stream.StreamInfo
 
+/** Duración larga: "2h 49min" o "12 min". */
+private fun longDuration(sec: Long): String? {
+    if (sec <= 0) return null
+    val h = sec / 3600
+    val m = (sec % 3600) / 60
+    return if (h > 0) "${h}h ${m}min" else "${m.coerceAtLeast(1)} min"
+}
+
 /** Hoja de calidad: se abre desde el ⚙ del reproductor o desde la fila de acciones. */
 private val qualitySheet = mutableStateOf(false)
 
@@ -113,6 +124,7 @@ fun Context.findActivity(): Activity? {
 }
 
 /** Pantalla del video abierto (reproductor arriba, detalles y relacionados abajo). */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoScreen(
     state: NowPlaying.State,
@@ -169,6 +181,19 @@ fun VideoScreen(
 
     if (fullscreen) {
         var zoom by rememberSaveable { mutableStateOf(false) }
+        var showInfo by remember { mutableStateOf(false) }
+        val info = state.info
+        val likedList by Library.liked.collectAsState()
+        val liked = likedList.any { it.url == state.video.url }
+        var disliked by remember(state.video.url) { mutableStateOf(false) }
+        val savedList by Library.watchLater.collectAsState()
+        val saved = savedList.any { it.url == state.video.url }
+        // Canal • duración • año
+        val cinemaSubtitle = joinDot(
+            state.video.channelName.ifBlank { info?.uploaderName },
+            longDuration(info?.duration ?: state.video.durationSec),
+            runCatching { info?.uploadDate?.offsetDateTime()?.year?.toString() }.getOrNull(),
+        ).replace(" · ", " • ")
         // Modo cine: solo el video y los controles flotantes
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             PlayerSurface(Modifier.fillMaxSize(), useController = false, zoom = zoom)
@@ -184,11 +209,70 @@ fun VideoScreen(
                 zoom = zoom,
                 onZoom = { zoom = it },
                 modifier = Modifier.fillMaxSize(),
+                subtitle = cinemaSubtitle,
+                onTitleClick = if (info != null) ({ showInfo = true }) else null,
+                next = upNext,
+                actions = {
+                    // 👍 158 K | 👎
+                    Row(
+                        Modifier.clip(RoundedCornerShape(50)).background(Color(0x33FFFFFF))
+                            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(50)),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(
+                            Modifier.clickable { if (Library.toggleLike(state.video)) disliked = false }
+                                .padding(start = 18.dp, end = 12.dp, top = 11.dp, bottom = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                if (liked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp, "Me gusta",
+                                tint = if (liked) VColors.Red else Color.White, modifier = Modifier.size(22.dp),
+                            )
+                            val likes = info?.likeCount ?: -1
+                            if (likes >= 0) {
+                                Spacer(Modifier.width(10.dp))
+                                Text(compactNumber(likes + if (liked) 1 else 0), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                        Box(Modifier.width(1.dp).height(24.dp).background(Color(0x55FFFFFF)))
+                        Box(
+                            Modifier.clickable {
+                                disliked = !disliked
+                                if (disliked && liked) Library.toggleLike(state.video)
+                            }.padding(start = 12.dp, end = 18.dp, top = 11.dp, bottom = 11.dp)
+                        ) {
+                            Icon(
+                                if (disliked) Icons.Filled.ThumbDown else Icons.Outlined.ThumbDown, "No me gusta",
+                                tint = if (disliked) VColors.Red else Color.White, modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                    GlassPill(Icons.Outlined.Share, "Compartir") { shareUrl(context, state.video.title, state.video.url) }
+                    GlassPill(
+                        if (saved) Icons.AutoMirrored.Outlined.PlaylistAddCheck else Icons.AutoMirrored.Outlined.PlaylistAdd,
+                        if (saved) "En tu lista" else "Agregar a lista",
+                        tint = if (saved) VColors.Red else Color.White,
+                    ) {
+                        val added = Library.toggleWatchLater(state.video)
+                        Toast.makeText(
+                            context,
+                            if (added) "Agregado a Ver más tarde" else "Quitado de Ver más tarde",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                },
             )
             val err = playerState.error
             if (err != null && !state.loading) ErrorOverlay(err) { NowPlaying.retry(context) }
         }
         if (qualitySheet.value) QualitySheet(state)
+        if (showInfo && info != null) {
+            ModalBottomSheet(
+                onDismissRequest = { showInfo = false },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = VColors.Surface,
+            ) { DescriptionSheet(state.video, info) }
+        }
         return
     }
 

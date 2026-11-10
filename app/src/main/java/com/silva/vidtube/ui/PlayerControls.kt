@@ -23,6 +23,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.outlined.Cast
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -90,6 +93,12 @@ fun PlayerControls(
     zoom: Boolean = false,
     onZoom: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /** Solo pantalla completa: línea bajo el título (canal • duración • año). */
+    subtitle: String? = null,
+    onTitleClick: (() -> Unit)? = null,
+    /** Solo pantalla completa: siguiente video y botones de abajo (Me gusta, Compartir…). */
+    next: com.silva.vidtube.data.VideoItem? = null,
+    actions: (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val player = remember { PlayerHolder.player(context) }
@@ -184,6 +193,61 @@ fun PlayerControls(
                         )
                     )
             ) {
+                if (fullscreen) {
+                    // Modo cine: ⌄ + logo, título grande y botones arriba a la derecha
+                    Column(Modifier.fillMaxWidth().align(Alignment.TopStart).padding(horizontal = 22.dp, vertical = 14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconCircle(Icons.Outlined.KeyboardArrowDown, "Salir de pantalla completa") { onClose() }
+                            androidx.compose.foundation.Image(
+                                androidx.compose.ui.res.painterResource(com.silva.vidtube.R.drawable.vidtube_wordmark),
+                                contentDescription = "Vidtube",
+                                modifier = Modifier.height(30.dp),
+                            )
+                            Spacer(Modifier.weight(1f))
+                            IconCircle(Icons.Outlined.Cast, "Transmitir") {
+                                poke()
+                                // Duplicar pantalla en un TV (Transmitir / Smart View del sistema)
+                                runCatching {
+                                    context.startActivity(
+                                        android.content.Intent(android.provider.Settings.ACTION_CAST_SETTINGS)
+                                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                }.onFailure {
+                                    Toast.makeText(context, "Usa \"Transmitir pantalla\" desde los ajustes rápidos", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            SubsButton(subsOn, subsLang) { poke() }
+                            if (onQuality != null) IconCircle(Icons.Outlined.Settings, "Calidad") { onQuality(); poke() }
+                            IconCircle(Icons.Outlined.FullscreenExit, "Salir de pantalla completa") { onFullscreen() }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            Modifier.clip(RoundedCornerShape(8.dp))
+                                .clickable(enabled = onTitleClick != null) { onTitleClick?.invoke(); poke() }
+                                .padding(start = 8.dp, end = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false).widthIn(max = 560.dp),
+                            )
+                            if (onTitleClick != null) {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.KeyboardArrowRight, null,
+                                    tint = Color.White, modifier = Modifier.size(32.dp),
+                                )
+                            }
+                        }
+                        if (!subtitle.isNullOrBlank()) {
+                            Text(
+                                subtitle, color = Color(0xFFD5D5DC), fontSize = 15.sp,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(start = 8.dp, top = 2.dp),
+                            )
+                        }
+                    }
+                } else {
                 // Arriba
                 Row(
                     Modifier.fillMaxWidth().align(Alignment.TopCenter)
@@ -208,34 +272,18 @@ fun PlayerControls(
                             onZoom(!zoom); poke()
                         }
                     }
-                    IconCircle(
-                        if (subsOn) Icons.Outlined.ClosedCaption else Icons.Outlined.ClosedCaptionDisabled,
-                        "Subtítulos",
-                        tint = if (subsOn) VColors.Red else Color.White,
-                    ) {
-                        poke()
-                        if (subsLang == null) {
-                            Toast.makeText(context, "Este video no tiene subtítulos", Toast.LENGTH_SHORT).show()
-                        } else {
-                            PlayerHolder.setSubtitles(!subsOn)
-                            Toast.makeText(
-                                context,
-                                if (!subsOn) "Subtítulos: $subsLang" else "Subtítulos desactivados",
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                        }
-                    }
+                    SubsButton(subsOn, subsLang) { poke() }
                     if (onQuality != null) IconCircle(Icons.Outlined.Settings, "Calidad") { onQuality(); poke() }
+                }
                 }
 
                 // Centro: botones de cristal
                 Row(
                     Modifier.align(Alignment.Center),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(if (fullscreen) 36.dp else 22.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (fullscreen) 90.dp else 22.dp),
                 ) {
-                    if (fullscreen && onPrevious != null) GlassButton(Icons.Filled.SkipPrevious, "Anterior", 46.dp) { onPrevious(); poke() }
-                    GlassButton(Icons.Outlined.Replay10, "Retroceder 10 s", 50.dp) { seekBy(-10_000) }
+                    GlassButton(Icons.Outlined.Replay10, "Retroceder 10 s", if (fullscreen) 58.dp else 50.dp) { seekBy(-10_000) }
                     if (buffering && wantsPlay) {
                         Box(Modifier.size(68.dp), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = VColors.Red, strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
@@ -243,21 +291,20 @@ fun PlayerControls(
                     } else {
                         GlassButton(
                             if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            if (playing) "Pausa" else "Reproducir", 68.dp,
+                            if (playing) "Pausa" else "Reproducir", if (fullscreen) 92.dp else 68.dp,
                         ) {
                             if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
                             if (player.isPlaying) player.pause() else player.play()
                             poke()
                         }
                     }
-                    GlassButton(Icons.Outlined.Forward10, "Adelantar 10 s", 50.dp) { seekBy(10_000) }
-                    if (fullscreen && onNext != null) GlassButton(Icons.Filled.SkipNext, "Siguiente", 46.dp) { onNext(); poke() }
+                    GlassButton(Icons.Outlined.Forward10, "Adelantar 10 s", if (fullscreen) 58.dp else 50.dp) { seekBy(10_000) }
                 }
 
                 // Abajo: tiempo, calidad y barra neón
                 Column(
                     Modifier.fillMaxWidth().align(Alignment.BottomCenter)
-                        .padding(horizontal = if (fullscreen) 24.dp else 10.dp, vertical = if (fullscreen) 14.dp else 0.dp)
+                        .padding(horizontal = if (fullscreen) 22.dp else 10.dp, vertical = if (fullscreen) 12.dp else 0.dp)
                 ) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -273,13 +320,23 @@ fun PlayerControls(
                             )
                             Spacer(Modifier.width(8.dp))
                         }
-                        IconCircle(
-                            if (fullscreen) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
-                            "Pantalla completa", size = 34.dp,
-                        ) { onFullscreen() }
+                        if (!fullscreen) {
+                            IconCircle(Icons.Outlined.Fullscreen, "Pantalla completa", size = 34.dp) { onFullscreen() }
+                        }
                     }
                     NeonSeekBar(position, buffered, duration, thick = fullscreen) { ms ->
                         player.seekTo(ms); poke()
+                    }
+                    if (fullscreen && (actions != null || next != null)) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            actions?.invoke(this)
+                            Spacer(Modifier.weight(1f))
+                            if (next != null && onNext != null) NextCard(next) { onNext(); poke() }
+                        }
                     }
                 }
             }
@@ -396,4 +453,78 @@ fun qualityBadge(q: Int): String? = when {
     q >= 1440 -> "2K"
     q >= 720 -> "HD"
     else -> null
+}
+
+@Composable
+private fun SubsButton(on: Boolean, language: String?, onTouched: () -> Unit) {
+    val context = LocalContext.current
+    IconCircle(
+        if (on) Icons.Outlined.ClosedCaption else Icons.Outlined.ClosedCaptionDisabled,
+        "Subtítulos",
+        tint = if (on) VColors.Red else Color.White,
+    ) {
+        onTouched()
+        if (language == null) {
+            Toast.makeText(context, "Este video no tiene subtítulos", Toast.LENGTH_SHORT).show()
+        } else {
+            PlayerHolder.setSubtitles(!on)
+            Toast.makeText(
+                context,
+                if (!on) "Subtítulos: $language" else "Subtítulos desactivados",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+}
+
+/** Tarjeta "Siguiente:" con miniatura y brillo rojo. */
+@Composable
+private fun NextCard(video: com.silva.vidtube.data.VideoItem, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .widthIn(max = 340.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color(0x99000000))
+            .border(1.5.dp, Brush.horizontalGradient(listOf(Color(0x55FFFFFF), VColors.Red)), RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        coil.compose.AsyncImage(
+            model = video.thumbnail, contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.width(76.dp).height(44.dp).clip(RoundedCornerShape(22.dp)),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f, fill = false)) {
+            Text("Siguiente:", color = Color(0xFFD5D5DC), fontSize = 12.sp)
+            Text(
+                video.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.width(1.dp).height(30.dp).background(Color(0x40FFFFFF)))
+        Icon(Icons.Filled.PlayArrow, "Reproducir siguiente", tint = Color.White, modifier = Modifier.padding(start = 8.dp).size(28.dp))
+    }
+}
+
+/** Píldora de cristal para los botones del modo cine. */
+@Composable
+fun GlassPill(icon: ImageVector, text: String?, tint: Color = Color.White, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color(0x33FFFFFF))
+            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, text, tint = tint, modifier = Modifier.size(22.dp))
+        if (text != null) {
+            Spacer(Modifier.width(10.dp))
+            Text(text, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        }
+    }
 }
