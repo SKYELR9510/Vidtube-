@@ -282,7 +282,10 @@ export function createPlayer(host, opts = {}) {
       }
       root.classList.remove('loading');
       const el = $('.vp-error');
-      el.innerHTML = `<div><b>No se pudo reproducir</b><pre>${(e?.message || 'Error ' + (e?.code || '')).replace(/</g, '&lt;')}</pre><button class="btn-red">Reintentar</button></div>`;
+      const why = e?.code === 1001 || e?.code === 1002
+        ? `YouTube no entregó el video (código ${e.code}). Prueba Reintentar; si sigue, revisa Configuración › Diagnóstico.`
+        : e?.code ? `Error del reproductor (código ${e.code}).` : (e?.message || 'Error desconocido');
+      el.innerHTML = `<div><b>No se pudo reproducir</b><pre>${why.replace(/</g, '&lt;')}</pre><button class="btn-red">Reintentar</button></div>`;
       el.classList.add('on');
       el.querySelector('button').onclick = () => load(id, info, 0);
     }

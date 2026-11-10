@@ -61,7 +61,11 @@ async function getMinter() {
     body: JSON.stringify([REQUEST_KEY, botguardResponse]),
   });
   const it = await r.json().catch(() => null);
-  if (!it?.[0]) throw new Error('sin token de integridad (' + r.status + ' ' + JSON.stringify(it).slice(0, 160) + ')');
+  if (!it?.[0]) {
+    // Sin token de integridad: usamos el token de respaldo que entrega YouTube
+    if (it?.[3]) { log('uso token de respaldo'); return { mintAsWebsafeString: async () => it[3] }; }
+    throw new Error('sin token de integridad (' + r.status + ')');
+  }
   return WebPoMinter.create({ integrityToken: it[0], estimatedTtlSecs: it[1], mintRefreshThreshold: it[2], websafeFallbackToken: it[3] }, webPoSignalOutput);
 }
 async function mintPot(identifier) {
