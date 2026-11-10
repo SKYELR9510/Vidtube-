@@ -67,6 +67,25 @@ export function createPlayer(host, opts = {}) {
   const ui = $('.vp-ui');
   const player = new shaka.Player();
   player.attach(video);
+  // Pedimos los pedazos del video igual que el reproductor web de YouTube:
+  // rango en la dirección (&range=), contador &rn= y POST con cuerpo "x\0"
+  let rn = 0;
+  player.getNetworkingEngine().registerRequestFilter((type, req) => {
+    const u = req.uris?.[0] || '';
+    if (!u.includes('googlevideo.com')) return;
+    const url = new URL(u);
+    const range = req.headers['Range'] || req.headers['range'];
+    if (range) {
+      url.searchParams.set('range', range.replace(/^bytes=/, ''));
+      delete req.headers['Range'];
+      delete req.headers['range'];
+    }
+    url.searchParams.set('rn', String(++rn));
+    url.searchParams.set('alr', 'yes');
+    req.uris = [url.toString()];
+    req.method = 'POST';
+    req.body = new Uint8Array([0x78, 0]).buffer;
+  });
   player.configure({
     streaming: { bufferingGoal: 45, rebufferingGoal: 1.5, retryParameters: { maxAttempts: 3 } },
     abr: { enabled: true },
@@ -306,7 +325,9 @@ export function createPlayer(host, opts = {}) {
     const next = (src.pos ?? -1) + 1;
     const failed = src.client;
     src = null;
-    YT.debug.push(`shaka error ${err?.code} con ${failed}`);
+    const d = err?.data || [];
+    const at = Math.round(video.currentTime || 0);
+    YT.debug.push(`shaka error ${err?.code} con ${failed} (HTTP ${d[1] ?? '?'}, seg ${at}s, pot=${String(d[0] || '').includes('pot=') ? 'sí' : 'no'})`);
     if (next < 3) load(current.id, current.info, next);
   });
 
