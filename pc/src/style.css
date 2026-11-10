@@ -308,3 +308,7 @@ button.set-row:hover { background: rgba(255, 255, 255, .03); }
 
 @media (max-width: 1100px) { .watch { grid-template-columns: 1fr; } .hero-info { max-width: 70%; } }
 @media (max-width: 1050px) { :root { --side: 76px; } .side nav span, .side-subs, .side-logo { display: none; } .side nav button { justify-content: center; } }
+
+/* Subtítulos centrados abajo, estilo YouTube */
+.vp-video::cue { background: rgba(8, 8, 8, .75); color: #fff; font-family: "Segoe UI", Roboto, sans-serif; font-size: 1.05em; line-height: 1.35; }
+.vp.cinema .vp-video::cue { font-size: 1.25em; }

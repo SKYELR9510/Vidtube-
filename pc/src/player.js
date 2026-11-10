@@ -11,6 +11,30 @@ const fmt = (s) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`;
 };
+/**
+ * YouTube manda los subtítulos con posición a la izquierda y, en los automáticos, palabra por palabra
+ * con líneas repetidas. Los limpiamos para que salgan centrados abajo, como en YouTube.
+ */
+async function cleanVtt(url) {
+  const raw = await (await fetch(url)).text();
+  const blocks = raw.replace(/\r/g, '').split(/\n\n+/);
+  const out = ['WEBVTT', ''];
+  let last = '';
+  for (const b of blocks) {
+    const lines = b.split('\n');
+    const t = lines.findIndex((l) => l.includes('-->'));
+    if (t < 0) continue;
+    const time = lines[t].replace(/(-->\s*\S+).*$/, '$1');
+    const text = lines.slice(t + 1).map((l) => l.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+    // En los automáticos cada bloque repite la línea anterior: nos quedamos con la nueva
+    const fresh = text.filter((l) => l !== last);
+    if (!fresh.length) continue;
+    last = text[text.length - 1];
+    out.push(time, ...fresh.slice(-2), '');
+  }
+  return URL.createObjectURL(new Blob([out.join('\n')], { type: 'text/vtt' }));
+}
+
 const badge = (h) => (h >= 2160 ? '4K' : h >= 1440 ? '2K' : h >= 720 ? 'HD' : '');
 
 /**
@@ -235,7 +259,10 @@ export function createPlayer(host, opts = {}) {
     if (subsOn && !player.getTextTracks().length) {
       const lang = navigator.language.slice(0, 2);
       const pick = [...src.captions].sort((a, b) => (a.lang.startsWith(lang) ? 0 : 1) - (b.lang.startsWith(lang) ? 0 : 1) || (a.auto ? 1 : 0) - (b.auto ? 1 : 0))[0];
-      try { await player.addTextTrackAsync(pick.url, pick.lang, 'subtitles', 'text/vtt', undefined, pick.name); } catch (e) { flash('No se pudieron cargar'); subsOn = false; }
+      try {
+        const url = await cleanVtt(pick.url);
+        await player.addTextTrackAsync(url, pick.lang, 'subtitles', 'text/vtt', undefined, pick.name);
+      } catch (e) { flash('No se pudieron cargar'); subsOn = false; }
     }
     const t = player.getTextTracks()[0];
     if (t) player.selectTextTrack(t);
