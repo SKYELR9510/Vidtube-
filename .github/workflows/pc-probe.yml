@@ -1,0 +1,13 @@
+name: Probe PC
+on: { push: { branches: [pc-probe] } }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: |
+          mkdir p && cd p && npm init -y >/dev/null && npm install bgutils-js@latest >/dev/null 2>&1
+          echo "=== BGC"; sed -n 1,120p node_modules/bgutils-js/dist/core/BotGuardClient.js
+          echo "=== TYPES"; grep -n -A12 "BotGuardClientOptions\|ChallengeFetcherConfig\|IntegrityTokenData\|SnapshotArgs" node_modules/bgutils-js/dist/utils/types.d.ts | head -80
+          echo "=== HELPERS"; grep -n -A8 "buildURL\|getHeaders\|GOOG_API_KEY" node_modules/bgutils-js/dist/utils/helpers.js node_modules/bgutils-js/dist/utils/constants.js | head -60
