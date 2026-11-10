@@ -1,0 +1,49 @@
+name: Vidtube PC (Windows)
+
+# Compila el instalador .exe para Windows cuando cambia la carpeta pc/
+on:
+  push:
+    branches: [main]
+    paths: ["pc/**", ".github/workflows/pc.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: pc
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Versión
+        shell: bash
+        run: |
+          VERSION="1.0.${{ github.run_number }}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          npm pkg set version=$VERSION
+      - name: Instalar dependencias
+        run: npm install --no-audit --no-fund
+      - name: Versiones usadas
+        shell: bash
+        run: npm ls youtubei.js bgutils-js shaka-player electron || true
+      - name: Compilar instalador
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist
+      - name: Publicar
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pc-${{ env.VERSION }}
+          name: Vidtube PC ${{ env.VERSION }}
+          make_latest: "false"
+          body: |
+            Vidtube para Windows ${{ env.VERSION }}.
+            Descarga **Vidtube-Setup-${{ env.VERSION }}.exe** e instálalo.
+            Si Windows muestra "Windows protegió tu PC": Más información → Ejecutar de todas formas.
+          files: pc/release/Vidtube-Setup-${{ env.VERSION }}.exe
