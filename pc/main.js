@@ -1,5 +1,6 @@
 // Vidtube para PC (Electron): ventana principal y ajustes de red
-const { app, BrowserWindow, session, shell } = require('electron');
+const { app, BrowserWindow, session, shell, ipcMain, net } = require('electron');
+const fs = require('fs');
 const path = require('path');
 
 // Quitamos "Electron" del user-agent: YouTube lo ve como un Chrome normal
@@ -24,6 +25,7 @@ function createWindow() {
     title: 'Vidtube',
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
       // La app habla directo con YouTube (sin servidor intermedio)
       webSecurity: false,
       contextIsolation: true,
@@ -68,6 +70,31 @@ async function runShots(win) {
   await js("localStorage.setItem('vt_settings', JSON.stringify({light:true})); location.reload()"); await wait(20000); await shot('10-light');
   app.quit();
 }
+
+// ---------- Token anti-bot en una ventana oculta "dentro" de youtube.com ----------
+let bgWin = null;
+let bgReady = null;
+const BG_URL = 'https://www.youtube.com/vidtube_bg';
+function ensureBgWindow() {
+  if (bgReady && bgWin && !bgWin.isDestroyed()) return bgReady;
+  const ses = session.fromPartition('persist:vidtube-bg');
+  try { ses.protocol.unhandle('https'); } catch {}
+  ses.protocol.handle('https', (req) => {
+    if (req.url === BG_URL) {
+      return new Response('<!doctype html><html><head><meta charset="utf-8"><title>bg</title></head><body></body></html>', { headers: { 'content-type': 'text/html' } });
+    }
+    return net.fetch(req, { bypassCustomProtocolHandlers: true });
+  });
+  bgWin = new BrowserWindow({ show: false, width: 400, height: 300, webPreferences: { session: ses, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+  const code = fs.readFileSync(path.join(__dirname, 'dist', 'pot.js'), 'utf8');
+  bgReady = bgWin.loadURL(BG_URL).then(() => bgWin.webContents.executeJavaScript(code + ';true'));
+  bgReady.catch(() => { bgReady = null; });
+  return bgReady;
+}
+ipcMain.handle('mint-pot', async (_e, identifier) => {
+  await ensureBgWindow();
+  return bgWin.webContents.executeJavaScript(`window.__vtMint(${JSON.stringify(String(identifier))})`);
+});
 
 app.whenReady().then(() => {
   const filter = { urls: ['*://*.googlevideo.com/*', '*://*.youtube.com/*', '*://*.google.com/*', '*://*.ytimg.com/*'] };

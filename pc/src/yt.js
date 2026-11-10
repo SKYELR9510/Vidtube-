@@ -70,6 +70,13 @@ async function getMinter() {
 }
 async function mintPot(identifier) {
   if (potCache.has(identifier)) return potCache.get(identifier);
+  // En la app instalada el token se genera en una ventana oculta de youtube.com (más confiable)
+  if (window.vtNative?.mintPot) {
+    try {
+      const pot = await window.vtNative.mintPot(identifier);
+      if (pot) { potCache.set(identifier, pot); log('token anti-bot listo (youtube.com)'); return pot; }
+    } catch (e) { log('token (youtube.com) falló', String(e.message || e).slice(0, 160)); }
+  }
   if (!minterPromise) minterPromise = getMinter().catch((e) => { minterPromise = null; throw e; });
   const minter = await minterPromise;
   const pot = await minter.mintAsWebsafeString(identifier);
@@ -409,9 +416,13 @@ export async function playable(id, seconds, attempt = 0) {
   const errors = [];
   for (const client of order.slice(attempt)) {
     try {
+      // Token del reproductor (ligado al video) y token de descarga (ligado a la sesión)
       let pot = null;
+      let gvsPot = null;
       if (client === 'WEB' || client === 'MWEB' || client === 'TV') {
         try { pot = await mintPot(id); } catch (e) { log('token falló', e.message); }
+        const visitor = yt.session.context.client.visitorData;
+        try { gvsPot = visitor ? await mintPot(visitor) : pot; } catch (e) { gvsPot = pot; }
       }
       const b = await yt.getBasicInfo(id, pot ? { client, po_token: pot } : { client });
       const st = b.playability_status?.status;
@@ -428,7 +439,7 @@ export async function playable(id, seconds, attempt = 0) {
         const live = sd.hls_manifest_url || sd.dash_manifest_url;
         if (live) { log('reproduciendo con', client, '(en vivo)'); return { src: live, client, live: true, captions, index: base.indexOf(client), pos: order.indexOf(client) }; }
       }
-      const dash = await buildDash(sd, seconds, pot);
+      const dash = await buildDash(sd, seconds, gvsPot || pot);
       if (dash) { log('reproduciendo con', client); return { src: dash, client, captions, index: base.indexOf(client), pos: order.indexOf(client) }; }
       if (sd.hls_manifest_url) return { src: sd.hls_manifest_url, client, captions, index: base.indexOf(client), pos: order.indexOf(client) };
       const muxed = (sd.formats || [])[0];

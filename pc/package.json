@@ -24,7 +24,7 @@
     "appId": "com.silva.vidtube.pc",
     "productName": "Vidtube",
     "artifactName": "Vidtube-Setup-${version}.${ext}",
-    "files": ["main.js", "index.html", "dist/**", "assets/**"],
+    "files": ["main.js", "preload.js", "index.html", "dist/**", "assets/**"],
     "directories": { "output": "release" },
     "win": { "target": "nsis", "icon": "assets/icon.ico" },
     "nsis": {
