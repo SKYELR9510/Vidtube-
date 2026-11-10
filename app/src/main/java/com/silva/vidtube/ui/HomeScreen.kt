@@ -178,6 +178,7 @@ fun HomeScreen(
                 )
             }
         }
+        var scrollToFeed by androidx.compose.runtime.remember { mutableStateOf(0) }
         val showTip = vm.selected == "todo" && Library.subscriptions.value.isEmpty() && Library.history.value.size < 3
         // Destacado + fila de Tendencias arriba (cuando ya hay suficientes videos)
         val videos = paged.items.filterIsInstance<FeedEntry.Video>().map { it.video }
@@ -197,7 +198,10 @@ fun HomeScreen(
                 val hero = videos[0]
                 item("hero") { HeroCard(hero, onPlay = { onVideo(hero) }, onChannel = onChannel) }
                 item("shelf_title") {
-                    SectionTitle(if (vm.selected == "todo") "Tendencias para ti" else "Lo más visto")
+                    SectionTitle(
+                        if (vm.selected == "todo") "Tendencias para ti" else "Lo más visto",
+                        onMore = { scrollToFeed++ },
+                    )
                 }
                 item("shelf") { VideoShelf(videos.subList(1, 9), onVideo) }
                 item("feed_title") { SectionTitle("Más videos") }
@@ -209,11 +213,16 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
             key(vm.selected) {
+                val listState = rememberLazyListState()
+                // "Ver más" baja hasta la lista completa de videos
+                LaunchedEffect(scrollToFeed) {
+                    if (scrollToFeed > 0) listState.animateScrollToItem(if (showTip) 4 else 3)
+                }
                 FeedList(
                     paged = paged,
                     onVideo = onVideo,
                     onChannel = onChannel,
-                    state = rememberLazyListState(),
+                    state = listState,
                     emptyTitle = "Nada por aquí todavía",
                     emptySubtitle = "Desliza hacia abajo para recargar.",
                     header = tip,
