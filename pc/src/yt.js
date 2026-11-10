@@ -314,7 +314,7 @@ export async function details(id) {
     channel: owner?.author?.name || b.author || '',
     channelId: owner?.author?.id || b.channel_id || '',
     avatar: bestImg(owner?.author?.thumbnails),
-    subs: txt(owner?.subscriber_count),
+    subs: /^n\/?a$/i.test(txt(owner?.subscriber_count).trim()) ? '' : txt(owner?.subscriber_count),
     views: txt(info.primary_info?.view_count?.view_count) || txt(info.primary_info?.view_count?.short_view_count),
     published: txt(info.primary_info?.relative_date) || txt(info.primary_info?.published),
     date: txt(info.primary_info?.published),
@@ -392,19 +392,29 @@ async function buildDash(sd, seconds, pot) {
  * Busca una forma de reproducir el video probando varios "clientes" de YouTube
  * (como hace la app de Android). Devuelve la fuente para el reproductor.
  */
+let preferred = Number(localStorage.getItem('vt_client2') || 0) || 0;
+/** El cliente que reprodujo bien queda primero para los siguientes videos. */
+export function rememberClient(index) {
+  if (index == null || index === preferred) return;
+  preferred = index;
+  try { localStorage.setItem('vt_client2', String(index)); } catch {}
+  log('cliente preferido ahora', index);
+}
+
 export async function playable(id, seconds, attempt = 0) {
   await init();
-  const order = ['ANDROID_VR', 'WEB', 'TV', 'IOS', 'MWEB'];
+  const base = ['MWEB', 'WEB', 'ANDROID_VR', 'TV', 'IOS'];
+  const order = [base[preferred], ...base.filter((_, i) => i !== preferred)];
   const errors = [];
   for (const client of order.slice(attempt)) {
     try {
       let pot = null;
-      if (client === 'WEB' || client === 'MWEB') {
+      if (client === 'WEB' || client === 'MWEB' || client === 'TV') {
         try { pot = await mintPot(id); } catch (e) { log('token falló', e.message); }
       }
       const b = await yt.getBasicInfo(id, pot ? { client, po_token: pot } : { client });
       const st = b.playability_status?.status;
-      if (st && st !== 'OK') { errors.push(`${client}: ${b.playability_status?.reason || st}`); continue; }
+      if (st && st !== 'OK') { errors.push(`${client}: ${b.playability_status?.reason || st}`); log('cliente', client, 'no disponible:', b.playability_status?.reason || st); continue; }
       const sd = b.streaming_data;
       if (!sd) { errors.push(`${client}: sin datos`); continue; }
       const captions = (b.captions?.caption_tracks || []).map((c) => ({
@@ -415,13 +425,13 @@ export async function playable(id, seconds, attempt = 0) {
       }));
       if (b.basic_info?.is_live || (!sd.adaptive_formats?.length && (sd.hls_manifest_url || sd.dash_manifest_url))) {
         const live = sd.hls_manifest_url || sd.dash_manifest_url;
-        if (live) { log('reproduciendo con', client, '(en vivo)'); return { src: live, client, live: true, captions, index: order.indexOf(client) }; }
+        if (live) { log('reproduciendo con', client, '(en vivo)'); return { src: live, client, live: true, captions, index: base.indexOf(client), pos: order.indexOf(client) }; }
       }
       const dash = await buildDash(sd, seconds, pot);
-      if (dash) { log('reproduciendo con', client); return { src: dash, client, captions, index: order.indexOf(client) }; }
-      if (sd.hls_manifest_url) return { src: sd.hls_manifest_url, client, captions, index: order.indexOf(client) };
+      if (dash) { log('reproduciendo con', client); return { src: dash, client, captions, index: base.indexOf(client), pos: order.indexOf(client) }; }
+      if (sd.hls_manifest_url) return { src: sd.hls_manifest_url, client, captions, index: base.indexOf(client), pos: order.indexOf(client) };
       const muxed = (sd.formats || [])[0];
-      if (muxed) return { src: await muxed.decipher(yt.session.player), client, progressive: true, captions, index: order.indexOf(client) };
+      if (muxed) return { src: await muxed.decipher(yt.session.player), client, progressive: true, captions, index: base.indexOf(client), pos: order.indexOf(client) };
       errors.push(`${client}: sin formatos`);
     } catch (e) {
       errors.push(`${client}: ${e.message}`);

@@ -175,6 +175,12 @@ export function createPlayer(host, opts = {}) {
     if (!dragging && d) paint(video.currentTime / d);
     if (video.buffered.length && d) $('.vp-buf').style.width = (video.buffered.end(video.buffered.length - 1) / d) * 100 + '%';
     if (current && d && !src?.live && Math.floor(video.currentTime) % 5 === 0) savePosition(current.id, video.currentTime, d);
+    if (current) current.lastTime = video.currentTime;
+    if (src && !src.remembered && current && video.currentTime - (current.startedAt ?? video.currentTime) > 20) {
+      src.remembered = true;
+      YT.rememberClient(src.index);
+    }
+    if (current && current.startedAt == null && video.currentTime > 0) current.startedAt = video.currentTime;
   });
   const setPlayIcon = () => { $('.vp-play').innerHTML = icon(video.paused ? 'play' : 'pause', 44); };
   video.addEventListener('play', () => { setPlayIcon(); show(); });
@@ -259,7 +265,9 @@ export function createPlayer(host, opts = {}) {
     try { return await loadInner(id, info, attempt); } finally { busy = false; }
   }
   async function loadInner(id, info, attempt) {
-    current = { id, info };
+    // Si estamos cambiando de "cliente" por un error, seguimos desde el mismo segundo
+    const resumeAt = attempt > 0 && current?.id === id ? (video.currentTime || current.lastTime || 0) : 0;
+    current = { id, info, lastTime: resumeAt };
     $('.vp-error').classList.remove('on');
     root.classList.add('loading');
     subsOn = false; $('.vp-cc').classList.remove('on');
@@ -267,14 +275,14 @@ export function createPlayer(host, opts = {}) {
       src = await YT.playable(id, info.seconds, attempt);
       if (destroyed || current?.id !== id) return;
       await player.unload();
-      const start = attempt === 0 && !src.live ? position(id) : (video.currentTime || 0);
+      const start = src.live ? 0 : attempt === 0 ? position(id) : resumeAt;
       await player.load(src.src, start || undefined, src.progressive ? 'video/mp4' : undefined);
       applyQuality();
       updateBadge();
       video.play().catch(() => {});
     } catch (e) {
       if (destroyed || current?.id !== id) return;
-      const next = (src?.index ?? -1) + 1;
+      const next = (src?.pos ?? -1) + 1;
       // Si falló el video con este cliente, probamos el siguiente
       if (e?.code && src && next < 5 && attempt < 4) {
         YT.debug.push(`shaka ${e.code} con ${src.client}; probando otro`);
@@ -293,7 +301,7 @@ export function createPlayer(host, opts = {}) {
   player.addEventListener('error', (ev) => {
     const err = ev.detail;
     if (!current || busy) return;
-    const next = (src?.index ?? -1) + 1;
+    const next = (src?.pos ?? -1) + 1;
     if (next < 5) { YT.debug.push(`shaka error ${err?.code} con ${src?.client}`); load(current.id, current.info, next); }
   });
 

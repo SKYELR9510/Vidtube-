@@ -433,12 +433,13 @@ const routes = {
     let round = 0;
     const loadMore = async () => {
       const q = topics[round++ % topics.length];
-      const more = await YT.shorts(q).catch(() => []);
+      const more = await YT.shorts(q).catch((e) => { YT.debug.push('shorts ' + q + ': ' + e.message); return []; });
       const seen = new Set(items.map((x) => x.id));
       items.push(...more.filter((x) => !seen.has(x.id)).sort(() => Math.random() - 0.5));
     };
-    if (!items.length) { v.querySelector('.short-info').innerHTML = loading(); await loadMore(); }
-    if (!items.length) throw new Error('No se encontraron Shorts.');
+    // Probamos varios temas hasta encontrar Shorts
+    for (let tries = 0; !items.length && tries < 5; tries++) { v.querySelector('.short-info').innerHTML = loading(); await loadMore(); }
+    if (!items.length) throw new Error('No se encontraron Shorts. Revisa tu conexión y toca Reintentar.');
     const p = createPlayer(v.querySelector('.player-host'), { vertical: true, loop: true, onClose: () => back() });
     const infoBox = v.querySelector('.short-info');
     const show = async () => {
