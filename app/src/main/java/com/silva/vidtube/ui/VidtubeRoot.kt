@@ -131,7 +131,20 @@ fun VidtubeRoot(isInPip: Boolean) {
             },
         ) { padding ->
             NavHost(nav, startDestination = "home", modifier = Modifier.padding(padding)) {
-                composable("home") { HomeScreen(openVideo, openChannel, openSearch, openSettings) }
+                composable("home") {
+                    HomeScreen(openVideo, openChannel, openSearch, openSettings, onMore = { id, title ->
+                        nav.navigate("more/" + Uri.encode(id) + "/" + Uri.encode(title))
+                    })
+                }
+                composable("more/{id}/{title}") { entry ->
+                    MoreScreen(
+                        chipId = Uri.decode(entry.arguments?.getString("id") ?: "todo"),
+                        title = Uri.decode(entry.arguments?.getString("title") ?: "Tendencias"),
+                        onBack = { nav.popBackStack() },
+                        onVideo = openVideo,
+                        onChannel = openChannel,
+                    )
+                }
                 composable("shorts") { ShortsScreen(onChannel = openChannel) }
                 composable("subs") { SubscriptionsScreen(openVideo, openChannel, openSearch) }
                 composable("library") {

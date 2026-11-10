@@ -25,6 +25,15 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.NorthWest
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.SportsSoccer
+import androidx.compose.material.icons.outlined.Newspaper
+import androidx.compose.material.icons.outlined.ChildCare
+import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -102,7 +111,7 @@ fun SearchScreen(
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { if (vm.submitted == null) focus.requestFocus() }
+    // El teclado no se abre solo: así se ven las categorías (tocar la barra para escribir)
 
     Column(Modifier.fillMaxSize().background(VColors.Background)) {
         Row(
@@ -166,6 +175,23 @@ fun SearchScreen(
                 if (vm.text.isBlank()) recent.map { it to true }
                 else vm.suggestions.map { it to false }
             LazyColumn(Modifier.fillMaxSize()) {
+                if (vm.text.isBlank()) {
+                    item("cat_title") { SectionTitle("Explorar categorías") }
+                    items(searchCategories.chunked(3), key = { "cat_" + it.first().label }) { row ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        ) {
+                            row.forEach { cat ->
+                                CategoryTile(cat, Modifier.weight(1f)) {
+                                    keyboard?.hide()
+                                    vm.submit(cat.query)
+                                }
+                            }
+                        }
+                    }
+                    if (rows.isNotEmpty()) item("recent_title") { SectionTitle("Búsquedas recientes") }
+                }
                 items(rows, key = { it.first + it.second }) { (s, isRecent) ->
                     Row(
                         Modifier
@@ -199,5 +225,56 @@ fun SearchScreen(
                 }
             }
         }
+    }
+}
+
+data class SearchCategory(
+    val label: String,
+    val query: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val from: Long,
+    val to: Long,
+)
+
+private val searchCategories = listOf(
+    SearchCategory("Películas", "películas completas en español", Icons.Outlined.Movie, 0xFF7A1F2B, 0xFF2A0A10),
+    SearchCategory("Videojuegos", "videojuegos gameplay", Icons.Outlined.SportsEsports, 0xFF2346B8, 0xFF0B1640),
+    SearchCategory("Música", "música 2026", Icons.Outlined.MusicNote, 0xFF8E2DC6, 0xFF2B0B42),
+    SearchCategory("Deportes", "deportes resumen", Icons.Outlined.SportsSoccer, 0xFF1F8A4C, 0xFF0A2E19),
+    SearchCategory("Noticias", "noticias hoy", Icons.Outlined.Newspaper, 0xFFB5462A, 0xFF3A130A),
+    SearchCategory("Infantil", "canciones infantiles", Icons.Outlined.ChildCare, 0xFFE0912B, 0xFF4A2A06),
+    SearchCategory("Ciencia y tecnología", "ciencia y tecnología", Icons.Outlined.Science, 0xFF1B8FA6, 0xFF06303A),
+    SearchCategory("Viajes y estilo de vida", "viajes vlog", Icons.Outlined.Flight, 0xFF2B6FD6, 0xFF0A2450),
+    SearchCategory("Comida y recetas", "recetas fáciles", Icons.Outlined.Restaurant, 0xFFC7502A, 0xFF43160A),
+)
+
+@Composable
+private fun CategoryTile(cat: SearchCategory, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .height(84.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(androidx.compose.ui.graphics.Color(cat.from), androidx.compose.ui.graphics.Color(cat.to))
+                )
+            )
+            .clickable(onClick = onClick)
+            .padding(10.dp),
+    ) {
+        Icon(
+            cat.icon, null,
+            tint = androidx.compose.ui.graphics.Color.White,
+            modifier = Modifier.align(Alignment.TopEnd).size(30.dp),
+        )
+        Text(
+            cat.label,
+            color = androidx.compose.ui.graphics.Color.White,
+            fontSize = 13.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            lineHeight = 15.sp,
+            maxLines = 2,
+            modifier = Modifier.align(Alignment.BottomStart),
+        )
     }
 }

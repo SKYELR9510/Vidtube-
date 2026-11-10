@@ -61,6 +61,28 @@ fun buildHomeChips(): List<HomeChip> {
     return listOf(HomeChip("todo", "Todo")) + interests + fixedChips
 }
 
+/** Contenido de una categoría del Inicio (todas menos "Todo"). */
+suspend fun loadChip(id: String): PagedResult = when {
+    id.startsWith("i:") -> Repository.freshSearch(id.removePrefix("i:"))
+    id == "mixes" -> Repository.freshSearch(
+        "mix " + (Library.interests(1).firstOrNull()?.query ?: "música") + " 2026",
+        maxAgeDays = 365,
+    )
+    else -> Repository.kiosk(id)
+}
+
+/** Todas las tendencias: música, videojuegos, películas y podcasts mezclados. */
+suspend fun loadAllTrending(): PagedResult = coroutineScope {
+    val ids = listOf("trending_music", "trending_gaming", "trending_movies_and_shows", "trending_podcasts_episodes")
+    val results = ids.map { async { runCatching { Repository.kiosk(it) } } }.map { it.await() }
+    val lists = results.mapNotNull { it.getOrNull()?.items }
+    if (lists.isEmpty()) throw results.first().exceptionOrNull() ?: Exception("Sin tendencias")
+    val out = ArrayList<FeedEntry>()
+    val queues = lists.map { ArrayDeque(it) }
+    while (queues.any { it.isNotEmpty() }) queues.forEach { q -> q.removeFirstOrNull()?.let { out += it } }
+    PagedResult(out.distinctBy { it.key }, null)
+}
+
 class HomeViewModel : ViewModel() {
     var selected by mutableStateOf("todo")
     var chips by mutableStateOf(buildHomeChips())
@@ -68,17 +90,7 @@ class HomeViewModel : ViewModel() {
     private val lists = HashMap<String, Paged>()
 
     fun list(id: String): Paged = lists.getOrPut(id) {
-        Paged(viewModelScope) {
-            when {
-                id == "todo" -> loadMix()
-                id.startsWith("i:") -> Repository.freshSearch(id.removePrefix("i:"))
-                id == "mixes" -> Repository.freshSearch(
-                    "mix " + (Library.interests(1).firstOrNull()?.query ?: "música") + " 2026",
-                    maxAgeDays = 365,
-                )
-                else -> Repository.kiosk(id)
-            }
-        }
+        Paged(viewModelScope) { if (id == "todo") loadMix() else loadChip(id) }
     }
 
     /**
@@ -136,6 +148,7 @@ fun HomeScreen(
     onChannel: (String) -> Unit,
     onSearch: () -> Unit,
     onSettings: () -> Unit,
+    onMore: (chipId: String, title: String) -> Unit,
     vm: HomeViewModel = viewModel(),
 ) {
     LaunchedEffect(Unit) { vm.chips = buildHomeChips() }
@@ -198,10 +211,9 @@ fun HomeScreen(
                 val hero = videos[0]
                 item("hero") { HeroCard(hero, onPlay = { onVideo(hero) }, onChannel = onChannel) }
                 item("shelf_title") {
-                    SectionTitle(
-                        if (vm.selected == "todo") "Tendencias para ti" else "Lo más visto",
-                        onMore = { scrollToFeed++ },
-                    )
+                    val shelfTitle = if (vm.selected == "todo") "Tendencias para ti"
+                    else "Lo más visto · " + (vm.chips.firstOrNull { it.id == vm.selected }?.label ?: "")
+                    SectionTitle(shelfTitle, onMore = { onMore(vm.selected, shelfTitle) })
                 }
                 item("shelf") { VideoShelf(videos.subList(1, 9), onVideo) }
                 item("feed_title") { SectionTitle("Más videos") }
