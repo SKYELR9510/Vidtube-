@@ -352,6 +352,59 @@ export async function comments(id) {
 }
 
 // ---------- Reproducción ----------
+
+// ---------- Cliente visionOS (el mismo que usa la app de Android con NewPipe) ----------
+const VOS = { name: 'VISIONOS', version: '1.04', model: 'RealityDevice17,1', os: '26.6.0.23O770' };
+const rnd = (n) => { const a = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'; let o = ''; const b = crypto.getRandomValues(new Uint8Array(n)); for (const x of b) o += a[x & 63]; return o; };
+async function visionOsStreaming(id) {
+  const body = {
+    context: {
+      client: {
+        clientName: VOS.name, clientVersion: VOS.version, clientScreen: 'WATCH', platform: 'MOBILE',
+        visitorData: yt.session.context.client.visitorData,
+        deviceMake: 'Apple', deviceModel: VOS.model, osName: 'visionOS', osVersion: VOS.os,
+        hl: 'es', gl: 'PE', utcOffsetMinutes: 0,
+      },
+      request: { internalExperimentFlags: [], useSsl: true },
+      user: { lockedSafetyMode: false },
+    },
+    videoId: id, cpn: rnd(16), contentCheckOk: true, racyCheckOk: true,
+  };
+  const r = await fetch(`https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false&t=${rnd(12)}&id=${id}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-goog-api-format-version': '2' },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json();
+  const st = j?.playabilityStatus?.status;
+  if (st && st !== 'OK') throw new Error(j.playabilityStatus.reason || st);
+  const sd = j?.streamingData;
+  if (!sd) throw new Error('sin datos de video');
+  const player = yt.session.player;
+  const conv = (f) => ({
+    itag: f.itag, mime_type: f.mimeType, bitrate: f.bitrate, width: f.width, height: f.height, fps: f.fps,
+    audio_sample_rate: Number(f.audioSampleRate) || undefined,
+    init_range: f.initRange && { start: +f.initRange.start, end: +f.initRange.end },
+    index_range: f.indexRange && { start: +f.indexRange.start, end: +f.indexRange.end },
+    has_video: /^video/.test(f.mimeType || ''), has_audio: /^audio/.test(f.mimeType || ''),
+    is_drc: !!f.isDrc, approx_duration_ms: f.approxDurationMs,
+    audio_track: f.audioTrack ? { id: f.audioTrack.id, audio_is_default: !!f.audioTrack.audioIsDefault } : undefined,
+    url: f.url,
+    decipher: () => player.decipher(f.url, f.signatureCipher, f.cipher),
+  });
+  return {
+    adaptive_formats: (sd.adaptiveFormats || []).map(conv),
+    formats: (sd.formats || []).map(conv),
+    hls_manifest_url: sd.hlsManifestUrl,
+    dash_manifest_url: sd.dashManifestUrl,
+    seconds: Number(j?.videoDetails?.lengthSeconds) || 0,
+    live: !!j?.videoDetails?.isLive,
+    captions: (j?.captions?.playerCaptionsTracklistRenderer?.captionTracks || []).map((c) => ({
+      url: c.baseUrl + '&fmt=vtt', lang: c.languageCode, name: txt(c.name?.runs?.[0]?.text || c.name?.simpleText), auto: c.kind === 'asr',
+    })),
+  };
+}
+
 const xmlEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 async function buildDash(sd, seconds, pot) {
@@ -410,12 +463,12 @@ async function buildDash(sd, seconds, pot) {
  * Busca una forma de reproducir el video probando varios "clientes" de YouTube
  * (como hace la app de Android). Devuelve la fuente para el reproductor.
  */
-let preferred = Math.min(4, Number(localStorage.getItem('vt_client5') || 0) || 0);
+let preferred = Math.min(4, Number(localStorage.getItem('vt_client6') || 0) || 0);
 /** El cliente que reprodujo bien queda primero para los siguientes videos. */
 export function rememberClient(index) {
   if (index == null || index === preferred) return;
   preferred = index;
-  try { localStorage.setItem('vt_client5', String(index)); } catch {}
+  try { localStorage.setItem('vt_client6', String(index)); } catch {}
   log('cliente preferido ahora', index);
 }
 
@@ -423,11 +476,27 @@ export async function playable(id, seconds, attempt = 0) {
   await init();
   // ANDROID_VR e iOS se cortan a los pocos segundos en conexiones normales: solo clientes web
   // MWEB con el token ligado al video o a la sesión (YouTube cambia cuál pide); luego TV y WEB
-  const base = ['MWEB:video', 'WEB_EMBEDDED:video', 'MWEB:sesion', 'TV:video', 'WEB:video'];
+  const base = ['VISIONOS:none', 'MWEB:video', 'MWEB:sesion', 'TV:video', 'WEB:video'];
   const order = [base[preferred], ...base.filter((_, i) => i !== preferred)];
   const errors = [];
   for (const entry of order.slice(attempt)) {
     const [client, binding] = entry.split(':');
+    if (client === 'VISIONOS') {
+      try {
+        const sd = await visionOsStreaming(id);
+        if (sd.live && (sd.hls_manifest_url || sd.dash_manifest_url)) {
+          log('reproduciendo con', entry, '(en vivo)');
+          return { src: sd.hls_manifest_url || sd.dash_manifest_url, live: true, captions: sd.captions, index: base.indexOf(entry), pos: order.indexOf(entry), client: entry };
+        }
+        const dash = await buildDash(sd, seconds || sd.seconds, null);
+        if (dash) { log('reproduciendo con', entry); return { src: dash, captions: sd.captions, index: base.indexOf(entry), pos: order.indexOf(entry), client: entry }; }
+        errors.push('VISIONOS: sin formatos');
+      } catch (e) {
+        errors.push('VISIONOS: ' + e.message);
+        log('cliente VISIONOS falló:', e.message);
+      }
+      continue;
+    }
     try {
       // Token del reproductor (ligado al video) y token de descarga (ligado a la sesión)
       let pot = null;

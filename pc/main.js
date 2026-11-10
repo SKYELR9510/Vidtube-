@@ -12,6 +12,7 @@ app.userAgentFallback = app.userAgentFallback
 const UA = {
   ANDROID_VR: 'com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip',
   IOS: 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
+  VISIONOS: 'com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; GB)',
   MWEB: 'Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)',
 };
 
@@ -98,9 +99,15 @@ ipcMain.handle('mint-pot', async (_e, identifier) => {
 });
 
 app.whenReady().then(() => {
-  const filter = { urls: ['*://*.googlevideo.com/*', '*://*.youtube.com/*', '*://*.google.com/*', '*://*.ytimg.com/*'] };
+  const filter = { urls: ['*://*.googlevideo.com/*', '*://*.youtube.com/*', '*://*.google.com/*', '*://*.ytimg.com/*', '*://youtubei.googleapis.com/*'] };
   session.defaultSession.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
     const h = details.requestHeaders;
+    // Cliente visionOS (como la app de Android): sin Origin/Referer y con su propio user-agent
+    if (details.url.includes('youtubei.googleapis.com') || /[?&]c=VISIONOS/.test(details.url)) {
+      delete h['Origin']; delete h['Referer'];
+      h['User-Agent'] = UA.VISIONOS;
+      return callback({ requestHeaders: h });
+    }
     h['Origin'] = 'https://www.youtube.com';
     h['Referer'] = 'https://www.youtube.com/';
     // Los videos pedidos con el cliente de Android/iOS esperan su propio user-agent
