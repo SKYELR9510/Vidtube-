@@ -51,6 +51,6 @@ fun VidtubeLogo(modifier: Modifier = Modifier) {
         painter = painterResource(R.drawable.vidtube_wordmark),
         contentDescription = "Vidtube",
         contentScale = ContentScale.Fit,
-        modifier = modifier.height(26.dp),
+        modifier = modifier.height(30.dp),
     )
 }
