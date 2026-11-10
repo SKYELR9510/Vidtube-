@@ -57,11 +57,11 @@ async function getMinter() {
   const botguardResponse = await bg.snapshot({ webPoSignalOutput });
   const r = await fetch('https://www.youtube.com/api/jnn/v1/GenerateIT', {
     method: 'POST',
-    headers: { 'content-type': 'application/json+protobuf', 'x-goog-api-key': GOOG_KEY },
+    headers: { 'content-type': 'application/json+protobuf', 'x-goog-api-key': GOOG_KEY, 'x-user-agent': 'grpc-web-javascript/0.1' },
     body: JSON.stringify([REQUEST_KEY, botguardResponse]),
   });
-  const it = await r.json();
-  if (!it?.[0]) throw new Error('sin token de integridad');
+  const it = await r.json().catch(() => null);
+  if (!it?.[0]) throw new Error('sin token de integridad (' + r.status + ' ' + JSON.stringify(it).slice(0, 160) + ')');
   return WebPoMinter.create({ integrityToken: it[0], estimatedTtlSecs: it[1], mintRefreshThreshold: it[2], websafeFallbackToken: it[3] }, webPoSignalOutput);
 }
 async function mintPot(identifier) {
