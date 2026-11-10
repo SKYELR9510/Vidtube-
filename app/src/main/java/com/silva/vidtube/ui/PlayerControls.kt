@@ -281,9 +281,9 @@ fun PlayerControls(
                 Row(
                     Modifier.align(Alignment.Center),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(if (fullscreen) 90.dp else 22.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (fullscreen) 90.dp else 34.dp),
                 ) {
-                    GlassButton(Icons.Outlined.Replay10, "Retroceder 10 s", if (fullscreen) 58.dp else 50.dp) { seekBy(-10_000) }
+                    GlassButton(Icons.Outlined.Replay10, "Retroceder 10 s", if (fullscreen) 58.dp else 42.dp) { seekBy(-10_000) }
                     if (buffering && wantsPlay) {
                         Box(Modifier.size(68.dp), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = VColors.Red, strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
@@ -291,14 +291,14 @@ fun PlayerControls(
                     } else {
                         GlassButton(
                             if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            if (playing) "Pausa" else "Reproducir", if (fullscreen) 92.dp else 68.dp,
+                            if (playing) "Pausa" else "Reproducir", if (fullscreen) 92.dp else 56.dp,
                         ) {
                             if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
                             if (player.isPlaying) player.pause() else player.play()
                             poke()
                         }
                     }
-                    GlassButton(Icons.Outlined.Forward10, "Adelantar 10 s", if (fullscreen) 58.dp else 50.dp) { seekBy(10_000) }
+                    GlassButton(Icons.Outlined.Forward10, "Adelantar 10 s", if (fullscreen) 58.dp else 42.dp) { seekBy(10_000) }
                 }
 
                 // Abajo: tiempo, calidad y barra neón
@@ -371,25 +371,28 @@ fun NeonSeekBar(position: Long, buffered: Long, duration: Long, thick: Boolean, 
             .height(28.dp)
             .pointerInput(duration) {
                 width = size.width.toFloat().coerceAtLeast(1f)
+                val inset = 8.dp.toPx()
                 detectTapGestures { off ->
-                    if (duration > 0) onSeek((duration * (off.x / width).coerceIn(0f, 1f)).toLong())
+                    if (duration > 0) onSeek((duration * ((off.x - inset) / (width - 2 * inset)).coerceIn(0f, 1f)).toLong())
                 }
             }
             .pointerInput(duration) {
                 width = size.width.toFloat().coerceAtLeast(1f)
+                val inset = 8.dp.toPx()
+                fun frac(x: Float) = ((x - inset) / (width - 2 * inset)).coerceIn(0f, 1f)
                 detectHorizontalDragGestures(
-                    onDragStart = { off -> dragging = true; dragFraction = (off.x / width).coerceIn(0f, 1f) },
+                    onDragStart = { off -> dragging = true; dragFraction = frac(off.x) },
                     onDragEnd = {
                         if (duration > 0) onSeek((duration * dragFraction).toLong())
                         dragging = false
                     },
                     onDragCancel = { dragging = false },
-                    onHorizontalDrag = { change, _ -> dragFraction = (change.position.x / width).coerceIn(0f, 1f) },
+                    onHorizontalDrag = { change, _ -> dragFraction = frac(change.position.x) },
                 )
             },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.fillMaxWidth().height(20.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(20.dp).padding(horizontal = 8.dp)) {
             val y = size.height / 2
             val stroke = (if (thick || dragging) 4.dp else 3.dp).toPx()
             val end = size.width * fraction
