@@ -52,7 +52,7 @@ async function getMinter() {
     const url = challenge.interpreterUrl.privateDoNotAccessOrElseTrustedResourceUrlWrappedValue;
     new Function(await (await fetch(url.startsWith('//') ? 'https:' + url : url)).text())();
   }
-  const bg = await BotGuardClient.create({ program: challenge.program, globalName: challenge.globalName, globalObj: window });
+  const bg = await BotGuardClient.create({ program: challenge.program, globalName: challenge.globalName, globalObject: window });
   const webPoSignalOutput = [];
   const botguardResponse = await bg.snapshot({ webPoSignalOutput });
   const r = await fetch('https://www.youtube.com/api/jnn/v1/GenerateIT', {
@@ -69,7 +69,7 @@ async function mintPot(identifier) {
   if (!minterPromise) minterPromise = getMinter().catch((e) => { minterPromise = null; throw e; });
   const minter = await minterPromise;
   const pot = await minter.mintAsWebsafeString(identifier);
-  if (pot) potCache.set(identifier, pot);
+  if (pot) { potCache.set(identifier, pot); log('token anti-bot listo'); }
   return pot;
 }
 
@@ -97,6 +97,8 @@ const durToSec = (t) => {
 };
 
 /** Convierte cualquier tarjeta de YouTube en un video simple para la interfaz. */
+const withViews = (s) => (s && /^[\d.,\s]+\s?(K|M|B|mil|M de)?$/i.test(s.trim()) ? s.trim() + ' vistas' : s);
+
 export function norm(n) {
   if (!n) return null;
   const t = n.type;
@@ -112,7 +114,7 @@ export function norm(n) {
         channel: n.author?.name || txt(n.short_byline_text) || '',
         channelId: n.author?.id || findChannelId(n.author) || '',
         avatar: bestImg(n.author?.thumbnails),
-        views: txt(n.short_view_count) || txt(n.view_count),
+        views: withViews(txt(n.short_view_count) || txt(n.view_count)),
         published: txt(n.published),
         duration: durText,
         seconds: n.duration?.seconds || durToSec(durText),
