@@ -47,3 +47,23 @@ jobs:
             Descarga **Vidtube-Setup-${{ env.VERSION }}.exe** e instálalo.
             Si Windows muestra "Windows protegió tu PC": Más información → Ejecutar de todas formas.
           files: pc/release/Vidtube-Setup-${{ env.VERSION }}.exe
+
+  screenshots:
+    # Abre la app en Linux y toma capturas de las pantallas para revisarlas
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pc
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb > /dev/null
+      - run: VIDTUBE_SHOTS=$PWD/shots timeout 240 xvfb-run -a -s "-screen 0 1440x900x24" npx electron . --no-sandbox || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capturas
+          path: pc/shots

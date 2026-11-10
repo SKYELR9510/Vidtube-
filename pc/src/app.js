@@ -633,6 +633,9 @@ async function checkUpdate(manual) {
   }
 }
 
+// Acceso para pruebas automáticas
+window.__vt = { go, debug: () => YT.debug };
+
 // ---------- Arranque ----------
 (async () => {
   try { await YT.init(); } catch (e) { console.error(e); }
