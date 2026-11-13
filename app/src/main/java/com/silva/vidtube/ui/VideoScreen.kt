@@ -141,10 +141,10 @@ fun VideoScreen(
     val fullscreen = fullscreenRequested || isLandscape
     val playerState = rememberPlayerUiState()
 
-    // Pantalla siempre encendida mientras el video se reproduce (también en pantalla completa)
-    DisposableEffect(playerState.isPlaying) {
+    // Pantalla encendida solo en pantalla completa mientras se reproduce (fuera de eso se apaga sola y ahorra batería)
+    DisposableEffect(playerState.isPlaying, fullscreen) {
         val window = activity?.window
-        if (playerState.isPlaying) window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (playerState.isPlaying && fullscreen) window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }

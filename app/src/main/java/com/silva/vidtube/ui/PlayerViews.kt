@@ -73,7 +73,7 @@ fun PlayerSurface(
                 setShowSubtitleButton(false)
                 // La ruedita la dibujan nuestros controles (si no, salían dos girando)
                 setShowBuffering(StyledPlayerView.SHOW_BUFFERING_NEVER)
-                keepScreenOn = true
+                keepScreenOn = false // lo maneja la pantalla del video (solo en pantalla completa)
                 this.useController = useController
                 this.player = player
                 if (onFullscreen != null) {
