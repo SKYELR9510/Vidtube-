@@ -230,14 +230,16 @@ async function loadHome(cat) {
   const topics = interests(3);
   const base = topics.length ? topics : ['música 2026', 'cumbia', 'reggaeton'];
   const subs = store.subs.slice(0, 6);
+  const errs = [];
+  const fail = (e) => { errs.push(e && e.message || String(e)); YT.debug.push('Inicio: ' + (e && e.message || e)); return []; };
   const jobs = [
-    ...base.map((q) => YT.search(q, { uploadDate: 'month' }).then((p) => p.videos).catch(() => [])),
-    YT.search('tendencias perú').then((p) => p.videos).catch(() => []),
+    ...base.map((q) => YT.search(q, { uploadDate: 'month' }).then((p) => p.videos).catch(fail)),
+    YT.search('tendencias perú').then((p) => p.videos).catch(fail),
     ...subs.map((c) => YT.channelLatest(c.id, 4)),
   ];
   const lists = await Promise.all(jobs);
   const mixed = interleave(lists).filter((v) => !watched.has(v.id));
-  if (!mixed.length) throw new Error('No se pudo cargar el Inicio. Revisa tu conexión.');
+  if (!mixed.length) throw new Error('No se pudo cargar el Inicio.' + (errs.length ? ' Motivo: ' + errs[0] : ' Revisa tu conexión.'));
   return { videos: mixed, more: () => YT.search(base[0]).then((p) => ({ videos: p.videos, more: p.more })) };
 }
 
@@ -641,7 +643,7 @@ window.__vt = { go, debug: () => YT.debug };
 
 // ---------- Arranque ----------
 (async () => {
-  try { await YT.init(); } catch (e) { console.error(e); }
+  try { await YT.init(); } catch (e) { console.error(e); YT.debug.push('No se pudo iniciar: ' + (e && e.message)); }
   setTimeout(() => document.getElementById('splash')?.classList.add('hide'), 600);
   setTimeout(() => document.getElementById('splash')?.remove(), 1300);
   go('home');

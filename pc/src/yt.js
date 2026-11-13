@@ -25,13 +25,14 @@ function log(...a) {
 export function init() {
   if (!ready) {
     ready = (async () => {
-      yt = await Innertube.create({
-        lang: 'es',
-        location: 'PE',
-        retrieve_player: true,
-        cache: new UniversalCache(false),
-        fetch: (input, initArg) => fetch(input, initArg),
-      });
+      const opts = { lang: 'es', location: 'PE', cache: new UniversalCache(false), fetch: (input, initArg) => fetch(input, initArg) };
+      try {
+        yt = await Innertube.create({ ...opts, retrieve_player: true });
+      } catch (e) {
+        // Si YouTube cambió su reproductor y no se puede leer, igual arrancamos (búsqueda, canales y visionOS funcionan)
+        log('sesión sin reproductor web:', e.message);
+        yt = await Innertube.create({ ...opts, retrieve_player: false });
+      }
       log('sesión lista');
       return yt;
     })().catch((e) => { ready = null; throw e; });
@@ -390,7 +391,7 @@ async function visionOsStreaming(id) {
     is_drc: !!f.isDrc, approx_duration_ms: f.approxDurationMs,
     audio_track: f.audioTrack ? { id: f.audioTrack.id, audio_is_default: !!f.audioTrack.audioIsDefault } : undefined,
     url: f.url,
-    decipher: () => player.decipher(f.url, f.signatureCipher, f.cipher),
+    decipher: async () => (player ? player.decipher(f.url, f.signatureCipher, f.cipher) : f.url),
   });
   return {
     adaptive_formats: (sd.adaptiveFormats || []).map(conv),
