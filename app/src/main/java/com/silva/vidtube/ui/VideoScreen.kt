@@ -1,5 +1,9 @@
 package com.silva.vidtube.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAddCheck
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.foundation.border
@@ -284,13 +288,46 @@ fun VideoScreen(
         return
     }
 
+    // Deslizar el video hacia abajo lo minimiza (sigue sonando en miniatura abajo)
+    val dragScope = androidx.compose.runtime.rememberCoroutineScope()
+    val dragY = remember { androidx.compose.animation.core.Animatable(0f) }
     Column(
         Modifier
             .fillMaxSize()
+            .graphicsLayer {
+                translationY = dragY.value
+                val f = (dragY.value / size.height.coerceAtLeast(1f)).coerceIn(0f, 1f)
+                alpha = 1f - f * 0.6f
+                scaleX = 1f - f * 0.15f
+                scaleY = 1f - f * 0.15f
+            }
             .background(VColors.Background)
             .statusBarsPadding()
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .background(Color.Black)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            dragScope.launch {
+                                if (dragY.value > size.height * 0.6f) {
+                                    NowPlaying.minimize()
+                                    dragY.snapTo(0f)
+                                } else {
+                                    dragY.animateTo(0f)
+                                }
+                            }
+                        },
+                        onDragCancel = { dragScope.launch { dragY.animateTo(0f) } },
+                    ) { change, amount ->
+                        change.consume()
+                        dragScope.launch { dragY.snapTo((dragY.value + amount).coerceAtLeast(0f)) }
+                    }
+                }
+        ) {
             PlayerSurface(Modifier.fillMaxSize(), useController = false)
             PlayerControls(
                 fullscreen = false,
