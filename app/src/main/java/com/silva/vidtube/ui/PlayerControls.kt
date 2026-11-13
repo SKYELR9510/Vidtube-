@@ -504,10 +504,11 @@ private fun NextCard(video: com.silva.vidtube.data.VideoItem, onClick: () -> Uni
             modifier = Modifier.width(70.dp).height(40.dp).clip(RoundedCornerShape(20.dp)),
         )
         Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f, fill = false)) {
-            Text("Siguiente:", color = Color(0xFFD5D5DC), fontSize = 12.sp)
+        // En una sola línea para que no se corte con letra grande
+        Row(Modifier.weight(1f, fill = false), verticalAlignment = Alignment.CenterVertically) {
+            Text("Siguiente: ", color = Color(0xFFD5D5DC), fontSize = 13.sp, maxLines = 1)
             Text(
-                video.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                video.title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
