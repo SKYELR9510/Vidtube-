@@ -304,3 +304,39 @@ fun TopIcon(icon: ImageVector, label: String, onClick: () -> Unit) {
         Icon(icon, label, tint = VColors.Text, modifier = Modifier.size(24.dp))
     }
 }
+
+/** Destacados del Inicio: pasan solos cada 3 segundos (se puede deslizar con el dedo). */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun HeroCarousel(videos: List<VideoItem>, onPlay: (VideoItem) -> Unit, onChannel: (String) -> Unit) {
+    val items = videos.take(5)
+    if (items.isEmpty()) return
+    val pager = androidx.compose.foundation.pager.rememberPagerState { items.size }
+    androidx.compose.runtime.LaunchedEffect(items.size) {
+        while (true) {
+            kotlinx.coroutines.delay(3000)
+            if (!pager.isScrollInProgress && items.size > 1) {
+                pager.animateScrollToPage((pager.currentPage + 1) % items.size)
+            }
+        }
+    }
+    Box {
+        androidx.compose.foundation.pager.HorizontalPager(state = pager) { page ->
+            HeroCard(items[page], onPlay = { onPlay(items[page]) }, onChannel = onChannel)
+        }
+        Row(
+            Modifier.align(Alignment.BottomEnd).padding(end = 28.dp, bottom = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            items.indices.forEach { i ->
+                val on = i == pager.currentPage
+                Box(
+                    Modifier
+                        .size(width = if (on) 22.dp else 8.dp, height = 8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (on) VColors.Red else Color(0x88FFFFFF))
+                )
+            }
+        }
+    }
+}

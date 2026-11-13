@@ -28,7 +28,7 @@ try {
 let focused = null;
 function focusables() {
   return [...document.querySelectorAll('.f')].filter((e) => {
-    if (e.closest('.hidden')) return false;
+    if (e.closest('.hidden') || e.closest('.off')) return false;
     const r = e.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   });
@@ -144,26 +144,43 @@ function grid(videos) {
   videos.forEach((v) => g.appendChild(card(v, videos)));
   return g;
 }
-function hero(v, list) {
-  const h = el(`
-    <section class="hero">
-      <img src="${esc((v.thumb || '').replace(/hq720|hqdefault|mqdefault/, 'maxresdefault'))}" alt="">
-      <div class="hero-shade"></div>
-      <div class="hero-info">
-        <h1>${esc(v.title)}</h1>
-        <p>${dot(v.channel, v.views, v.published)}</p>
-        <div class="hero-btns">
-          <button class="f btn-white play">${icon('play', 34)} Reproducir</button>
-          <button class="f btn-glass save">${icon(isLater(v.id) ? 'playlistCheck' : 'playlistAdd', 30)} <span>${isLater(v.id) ? 'Guardado' : 'Guardar'}</span></button>
+/** Destacados que pasan solos cada 3 segundos (se detiene mientras el foco está en ellos). */
+function hero(list) {
+  const items = list.slice(0, 5);
+  const h = el(`<section class="hero">${items.map((v, i) => `
+      <div class="hero-slide ${i === 0 ? 'on' : 'off'}">
+        <img src="${esc((v.thumb || '').replace(/hq720|hqdefault|mqdefault/, 'maxresdefault'))}" alt="">
+        <div class="hero-shade"></div>
+        <div class="hero-info">
+          <h1>${esc(v.title)}</h1>
+          <p>${dot(v.channel, v.views, v.published)}</p>
+          <div class="hero-btns">
+            <button class="f btn-white play">${icon('play', 34)} Reproducir</button>
+            <button class="f btn-glass save">${icon(isLater(v.id) ? 'playlistCheck' : 'playlistAdd', 30)} <span>${isLater(v.id) ? 'Guardado' : 'Guardar'}</span></button>
+          </div>
         </div>
-      </div>
+      </div>`).join('')}
+      <div class="hero-dots">${items.map((_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div>
     </section>`);
-  h.querySelector('.play').onclick = () => openWatch(v, list);
-  h.querySelector('.save').onclick = (e) => {
-    const on = toggleLater(v);
-    e.currentTarget.innerHTML = `${icon(on ? 'playlistCheck' : 'playlistAdd', 30)} <span>${on ? 'Guardado' : 'Guardar'}</span>`;
-    toast(on ? 'Guardado en Ver más tarde' : 'Quitado de Ver más tarde');
-  };
+  const slides = [].slice.call(h.querySelectorAll('.hero-slide'));
+  const dots = [].slice.call(h.querySelectorAll('.hero-dots i'));
+  slides.forEach((sl, i) => {
+    const v = items[i];
+    sl.querySelector('.play').onclick = () => openWatch(v, list);
+    sl.querySelector('.save').onclick = (e) => {
+      const on = toggleLater(v);
+      e.currentTarget.innerHTML = `${icon(on ? 'playlistCheck' : 'playlistAdd', 30)} <span>${on ? 'Guardado' : 'Guardar'}</span>`;
+      toast(on ? 'Guardado en Ver más tarde' : 'Quitado de Ver más tarde');
+    };
+  });
+  let cur = 0;
+  const timer = setInterval(() => {
+    if (!document.body.contains(h)) { clearInterval(timer); return; }
+    if (items.length < 2 || (focused && h.contains(focused))) return;
+    cur = (cur + 1) % items.length;
+    slides.forEach((sl, k) => { sl.classList.toggle('on', k === cur); sl.classList.toggle('off', k !== cur); });
+    dots.forEach((d, k) => d.classList.toggle('on', k === cur));
+  }, 3000);
   return h;
 }
 
@@ -194,8 +211,8 @@ const routes = {
     const watched = new Set(store.history.map((v) => v.id));
     const fresh = forYou.filter((v) => !watched.has(v.id));
     view.innerHTML = '';
-    if (fresh.length) view.appendChild(hero(fresh[0], fresh));
-    if (fresh.length > 1) view.appendChild(row('Para ti', fresh.slice(1, 21)));
+    if (fresh.length) view.appendChild(hero(fresh));
+    if (fresh.length > 5) view.appendChild(row('Para ti', fresh.slice(5, 25)));
     if (store.history.length) view.appendChild(row('Seguir viendo', store.history.slice(0, 15)));
     for (const [title, q] of rowsDef.slice(1)) {
       const holder = el(`<section class="row"><h2>${esc(title)}</h2><div class="row-scroll">${loading()}</div></section>`);

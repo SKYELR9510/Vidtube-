@@ -182,27 +182,50 @@ function shelf(videos) {
   videos.forEach((v) => row.appendChild(card(v)));
   return row;
 }
-function hero(v) {
-  const h = el(`
-    <div class="hero">
-      <img src="${esc(v.thumb.replace(/hq720|hqdefault|mqdefault/, 'maxresdefault'))}" onerror="this.src='${esc(v.thumb)}'" alt="">
-      <div class="hero-shade"></div>
-      <div class="hero-info">
-        <h1>${esc(v.title)}</h1>
-        <p>${dot(v.channel, v.views, v.published)}</p>
-        <div class="hero-btns">
-          <button class="btn-white play">${icon('play', 22)} Reproducir</button>
-          <button class="btn-glass save">${icon(isLater(v.id) ? 'playlistCheck' : 'playlistAdd', 22)} <span>${isLater(v.id) ? 'Guardado' : 'Guardar'}</span></button>
+/** Destacados que van pasando solos cada 3 segundos (se detiene al pasar el mouse). */
+function hero(list) {
+  const items = list.slice(0, 5);
+  const h = el(`<div class="hero">${items.map((v, i) => `
+      <div class="hero-slide ${i === 0 ? 'on' : ''}">
+        <img src="${esc(v.thumb.replace(/hq720|hqdefault|mqdefault/, 'maxresdefault'))}" onerror="this.src='${esc(v.thumb)}'" alt="">
+        <div class="hero-shade"></div>
+        <div class="hero-info">
+          <h1>${esc(v.title)}</h1>
+          <p>${dot(v.channel, v.views, v.published)}</p>
+          <div class="hero-btns">
+            <button class="btn-white play">${icon('play', 22)} Reproducir</button>
+            <button class="btn-glass save">${icon(isLater(v.id) ? 'playlistCheck' : 'playlistAdd', 22)} <span>${isLater(v.id) ? 'Guardado' : 'Guardar'}</span></button>
+          </div>
         </div>
-      </div>
+      </div>`).join('')}
+      <div class="hero-dots">${items.map((_, i) => `<button class="${i === 0 ? 'on' : ''}" data-i="${i}"></button>`).join('')}</div>
     </div>`);
-  h.querySelector('.play').onclick = () => go('watch', { v });
-  h.querySelector('img').onclick = () => go('watch', { v });
-  h.querySelector('.save').onclick = (e) => {
-    const on = toggleLater(v);
-    e.currentTarget.innerHTML = `${icon(on ? 'playlistCheck' : 'playlistAdd', 22)} <span>${on ? 'Guardado' : 'Guardar'}</span>`;
-    toast(on ? 'Guardado en Ver más tarde' : 'Quitado de Ver más tarde');
+  const slides = [...h.querySelectorAll('.hero-slide')];
+  const dots = [...h.querySelectorAll('.hero-dots button')];
+  slides.forEach((sl, i) => {
+    const v = items[i];
+    sl.querySelector('.play').onclick = () => go('watch', { v });
+    sl.querySelector('img').onclick = () => go('watch', { v });
+    sl.querySelector('.save').onclick = (e) => {
+      const on = toggleLater(v);
+      e.currentTarget.innerHTML = `${icon(on ? 'playlistCheck' : 'playlistAdd', 22)} <span>${on ? 'Guardado' : 'Guardar'}</span>`;
+      toast(on ? 'Guardado en Ver más tarde' : 'Quitado de Ver más tarde');
+    };
+  });
+  let cur = 0;
+  let paused = false;
+  const show = (i) => {
+    cur = (i + items.length) % items.length;
+    slides.forEach((sl, k) => sl.classList.toggle('on', k === cur));
+    dots.forEach((d, k) => d.classList.toggle('on', k === cur));
   };
+  dots.forEach((d) => (d.onclick = () => show(+d.dataset.i)));
+  h.addEventListener('mouseenter', () => (paused = true));
+  h.addEventListener('mouseleave', () => (paused = false));
+  const timer = setInterval(() => {
+    if (!document.body.contains(h)) { clearInterval(timer); return; }
+    if (!paused && items.length > 1) show(cur + 1);
+  }, 3000);
   return h;
 }
 
@@ -252,12 +275,12 @@ const routes = {
     body.innerHTML = '';
     const vids = p.videos;
     if (vids.length >= 12) {
-      body.appendChild(hero(vids[0]));
+      body.appendChild(hero(vids.slice(0, 5)));
       const title = cat === 'todo' ? 'Tendencias para ti' : 'Lo más visto · ' + (CATS.find((c) => c[0] === cat)?.[1] || cat);
       body.appendChild(section(title, () => go('more', { cat, title })));
-      body.appendChild(shelf(vids.slice(1, 9)));
+      body.appendChild(shelf(vids.slice(5, 13)));
       body.appendChild(section('Más videos'));
-      return infinite(body, { videos: vids.slice(9), more: p.more });
+      return infinite(body, { videos: vids.slice(13), more: p.more });
     }
     return infinite(body, p);
   },

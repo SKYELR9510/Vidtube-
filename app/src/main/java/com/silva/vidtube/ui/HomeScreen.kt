@@ -195,7 +195,7 @@ fun HomeScreen(
         val showTip = vm.selected == "todo" && Library.subscriptions.value.isEmpty() && Library.history.value.size < 3
         // Destacado + fila de Tendencias arriba (cuando ya hay suficientes videos)
         val videos = paged.items.filterIsInstance<FeedEntry.Video>().map { it.video }
-        val featured = paged.items.size >= 12 && paged.items.take(9).all { it is FeedEntry.Video }
+        val featured = paged.items.size >= 16 && paged.items.take(13).all { it is FeedEntry.Video }
         val tip: LazyListScope.() -> Unit = {
             if (showTip) {
                 item("tip") {
@@ -208,14 +208,13 @@ fun HomeScreen(
                 }
             }
             if (featured) {
-                val hero = videos[0]
-                item("hero") { HeroCard(hero, onPlay = { onVideo(hero) }, onChannel = onChannel) }
+                item("hero") { HeroCarousel(videos.take(5), onPlay = onVideo, onChannel = onChannel) }
                 item("shelf_title") {
                     val shelfTitle = if (vm.selected == "todo") "Tendencias para ti"
                     else "Lo más visto · " + (vm.chips.firstOrNull { it.id == vm.selected }?.label ?: "")
                     SectionTitle(shelfTitle, onMore = { onMore(vm.selected, shelfTitle) })
                 }
-                item("shelf") { VideoShelf(videos.subList(1, 9), onVideo) }
+                item("shelf") { VideoShelf(videos.subList(5, 13), onVideo) }
                 item("feed_title") { SectionTitle("Más videos") }
             }
         }
@@ -238,7 +237,7 @@ fun HomeScreen(
                     emptyTitle = "Nada por aquí todavía",
                     emptySubtitle = "Desliza hacia abajo para recargar.",
                     header = tip,
-                    skip = if (featured) 9 else 0,
+                    skip = if (featured) 13 else 0,
                 )
             }
         }
