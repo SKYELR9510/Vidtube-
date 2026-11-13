@@ -183,6 +183,9 @@ fun PlayerControls(
         }
 
         AnimatedVisibility(visible, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
+          androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+            // Celulares en horizontal tienen poca altura: todo más compacto para que no se encime
+            val compact = fullscreen && maxHeight < 520.dp
             Box(
                 Modifier
                     .fillMaxSize()
@@ -195,7 +198,7 @@ fun PlayerControls(
             ) {
                 if (fullscreen) {
                     // Modo cine: ⌄ + logo, título grande y botones arriba a la derecha
-                    Column(Modifier.fillMaxWidth().align(Alignment.TopStart).padding(horizontal = 22.dp, vertical = 14.dp)) {
+                    Column(Modifier.fillMaxWidth().align(Alignment.TopStart).padding(horizontal = 22.dp, vertical = if (compact) 6.dp else 14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconCircle(Icons.Outlined.KeyboardArrowDown, "Salir de pantalla completa") { onClose() }
                             androidx.compose.foundation.Image(
@@ -220,7 +223,7 @@ fun PlayerControls(
                             if (onQuality != null) IconCircle(Icons.Outlined.Settings, "Calidad") { onQuality(); poke() }
                             IconCircle(Icons.Outlined.FullscreenExit, "Salir de pantalla completa") { onFullscreen() }
                         }
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(if (compact) 0.dp else 10.dp))
                         Row(
                             Modifier.clip(RoundedCornerShape(8.dp))
                                 .clickable(enabled = onTitleClick != null) { onTitleClick?.invoke(); poke() }
@@ -228,7 +231,7 @@ fun PlayerControls(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold,
+                                title, color = Color.White, fontSize = if (compact) 19.sp else 26.sp, fontWeight = FontWeight.ExtraBold,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false).widthIn(max = 560.dp),
                             )
@@ -241,7 +244,7 @@ fun PlayerControls(
                         }
                         if (!subtitle.isNullOrBlank()) {
                             Text(
-                                subtitle, color = Color(0xFFD5D5DC), fontSize = 15.sp,
+                                subtitle, color = Color(0xFFD5D5DC), fontSize = if (compact) 13.sp else 15.sp,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(start = 8.dp, top = 2.dp),
                             )
@@ -281,9 +284,9 @@ fun PlayerControls(
                 Row(
                     Modifier.align(Alignment.Center),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(if (fullscreen) 90.dp else 34.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (compact) 60.dp else if (fullscreen) 90.dp else 34.dp),
                 ) {
-                    GlassButton(Icons.Outlined.Replay10, "Retroceder 10 s", if (fullscreen) 58.dp else 42.dp) { seekBy(-10_000) }
+                    GlassButton(Icons.Outlined.Replay10, "Retroceder 10 s", if (compact) 50.dp else if (fullscreen) 58.dp else 42.dp) { seekBy(-10_000) }
                     if (buffering && wantsPlay) {
                         Box(Modifier.size(68.dp), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = VColors.Red, strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
@@ -291,20 +294,20 @@ fun PlayerControls(
                     } else {
                         GlassButton(
                             if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            if (playing) "Pausa" else "Reproducir", if (fullscreen) 92.dp else 56.dp,
+                            if (playing) "Pausa" else "Reproducir", if (compact) 72.dp else if (fullscreen) 92.dp else 56.dp,
                         ) {
                             if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
                             if (player.isPlaying) player.pause() else player.play()
                             poke()
                         }
                     }
-                    GlassButton(Icons.Outlined.Forward10, "Adelantar 10 s", if (fullscreen) 58.dp else 42.dp) { seekBy(10_000) }
+                    GlassButton(Icons.Outlined.Forward10, "Adelantar 10 s", if (compact) 50.dp else if (fullscreen) 58.dp else 42.dp) { seekBy(10_000) }
                 }
 
                 // Abajo: tiempo, calidad y barra neón
                 Column(
                     Modifier.fillMaxWidth().align(Alignment.BottomCenter)
-                        .padding(horizontal = if (fullscreen) 22.dp else 10.dp, vertical = if (fullscreen) 12.dp else 0.dp)
+                        .padding(horizontal = if (fullscreen) 22.dp else 10.dp, vertical = if (compact) 4.dp else if (fullscreen) 12.dp else 0.dp)
                 ) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -329,9 +332,9 @@ fun PlayerControls(
                     }
                     if (fullscreen && (actions != null || next != null)) {
                         Row(
-                            Modifier.fillMaxWidth().padding(top = 6.dp),
+                            Modifier.fillMaxWidth().padding(top = if (compact) 2.dp else 6.dp).height(if (compact) 48.dp else 58.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             actions?.invoke(this)
                             Spacer(Modifier.weight(1f))
@@ -340,6 +343,7 @@ fun PlayerControls(
                     }
                 }
             }
+          }
         }
 
         // Con los controles ocultos queda una línea fina de progreso (solo en vista normal)
@@ -486,6 +490,7 @@ private fun NextCard(video: com.silva.vidtube.data.VideoItem, onClick: () -> Uni
     Row(
         Modifier
             .widthIn(max = 340.dp)
+            .height(52.dp)
             .clip(RoundedCornerShape(50))
             .background(Color(0x99000000))
             .border(1.5.dp, Brush.horizontalGradient(listOf(Color(0x55FFFFFF), VColors.Red)), RoundedCornerShape(50))
@@ -496,7 +501,7 @@ private fun NextCard(video: com.silva.vidtube.data.VideoItem, onClick: () -> Uni
         coil.compose.AsyncImage(
             model = video.thumbnail, contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            modifier = Modifier.width(76.dp).height(44.dp).clip(RoundedCornerShape(22.dp)),
+            modifier = Modifier.width(70.dp).height(40.dp).clip(RoundedCornerShape(20.dp)),
         )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f, fill = false)) {
@@ -521,13 +526,13 @@ fun GlassPill(icon: ImageVector, text: String?, tint: Color = Color.White, onCli
             .background(Color(0x33FFFFFF))
             .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(50))
             .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 11.dp),
+            .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, text, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(icon, text, tint = tint, modifier = Modifier.size(20.dp))
         if (text != null) {
             Spacer(Modifier.width(10.dp))
-            Text(text, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(text, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
     }
 }

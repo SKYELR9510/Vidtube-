@@ -233,7 +233,7 @@ fun VideoScreen(
                     ) {
                         Row(
                             Modifier.clickable { if (Library.toggleLike(state.video)) disliked = false }
-                                .padding(start = 18.dp, end = 12.dp, top = 11.dp, bottom = 11.dp),
+                                .padding(start = 18.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
@@ -251,7 +251,7 @@ fun VideoScreen(
                             Modifier.clickable {
                                 disliked = !disliked
                                 if (disliked && liked) Library.toggleLike(state.video)
-                            }.padding(start = 12.dp, end = 18.dp, top = 11.dp, bottom = 11.dp)
+                            }.padding(start = 12.dp, end = 18.dp, top = 9.dp, bottom = 9.dp)
                         ) {
                             Icon(
                                 if (disliked) Icons.Filled.ThumbDown else Icons.Outlined.ThumbDown, "No me gusta",
