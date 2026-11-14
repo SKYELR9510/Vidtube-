@@ -130,6 +130,9 @@ ipcMain.handle('mint-pot', async (e, identifier) => {
   return bgWin.webContents.executeJavaScript(`window.__vtMint(${JSON.stringify(String(identifier))})`);
 });
 
+// En las pruebas automáticas (sin tarjeta de video) se dibuja por software para poder tomar capturas
+if (process.env.VIDTUBE_SHOTS) app.disableHardwareAcceleration();
+
 app.whenReady().then(() => {
   const filter = { urls: ['*://*.googlevideo.com/*', '*://*.youtube.com/*', '*://*.google.com/*', '*://*.ytimg.com/*', '*://youtubei.googleapis.com/*'] };
   session.defaultSession.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
