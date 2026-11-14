@@ -138,7 +138,8 @@ ipcMain.handle('mint-pot', async (e, identifier) => {
   // Solo la ventana de la app puede pedirlo, y con un identificador de video válido
   if (!fromApp(e)) throw new Error('origen no permitido');
   identifier = String(identifier);
-  if (!/^[A-Za-z0-9_%=+\/.-]{1,256}$/.test(identifier)) throw new Error('identificador inválido');
+  // Va dentro de JSON.stringify (no puede inyectar código); aquí solo se limita tamaño y caracteres de control
+  if (!identifier || identifier.length > 512 || /[\u0000-\u001f]/.test(identifier)) throw new Error('identificador inválido');
   await ensureBgWindow();
   return bgWin.webContents.executeJavaScript(`window.__vtMint(${JSON.stringify(String(identifier))})`);
 });
