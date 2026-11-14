@@ -123,18 +123,24 @@ function back() {
 }
 
 // ---------- Tarjetas y filas ----------
+/** Barra roja con lo que ya viste del video. */
+function progBar(v) {
+  const pos = position(v.id);
+  if (!pos || !v.seconds || v.live) return '';
+  return `<span class="prog"><i style="width:${Math.min(100, Math.max(2, pos / v.seconds * 100)).toFixed(1)}%"></i></span>`;
+}
 function card(v, list) {
   const c = el(`
     <button class="f card ${v.short ? 'short' : ''}">
-      <div class="thumb"><img src="${esc(v.thumb)}" alt="">${v.live ? '<span class="dur live">EN VIVO</span>' : v.duration ? `<span class="dur">${esc(v.duration)}</span>` : ''}</div>
+      <div class="thumb"><img src="${esc(v.thumb)}" alt="">${v.live ? '<span class="dur live"><i></i>EN VIVO</span>' : v.duration ? `<span class="dur">${esc(v.duration)}</span>` : ''}${progBar(v)}</div>
       <div class="title">${esc(v.title)}</div>
       <div class="sub">${dot(v.channel, v.views)}</div>
     </button>`);
   c.onclick = () => openWatch(v, list);
   return c;
 }
-function row(title, videos) {
-  const r = el(`<section class="row"><h2>${esc(title)}</h2><div class="row-scroll"></div></section>`);
+function row(title, videos, sub) {
+  const r = el(`<section class="row"><h2>${esc(title)}${sub ? `<small>${esc(sub)}</small>` : ''}</h2><div class="row-scroll"></div></section>`);
   const box = r.querySelector('.row-scroll');
   videos.forEach((v) => box.appendChild(card(v, videos)));
   return r;
@@ -152,11 +158,12 @@ function hero(list) {
         <img src="${esc((v.thumb || '').replace(/hq720|hqdefault|mqdefault/, 'maxresdefault'))}" alt="">
         <div class="hero-shade"></div>
         <div class="hero-info">
+          ${v.live ? '<span class="live-badge"><i></i>EN VIVO</span>' : '<span class="kicker">DESTACADO</span>'}
           <h1>${esc(v.title)}</h1>
-          <p>${dot(v.channel, v.views, v.published)}</p>
+          <p>${dot(v.channel, v.views, v.published, v.live ? '' : v.duration)}</p>
           <div class="hero-btns">
-            <button class="f btn-white play">${icon('play', 34)} Reproducir</button>
-            <button class="f btn-glass save">${icon(isLater(v.id) ? 'playlistCheck' : 'playlistAdd', 30)} <span>${isLater(v.id) ? 'Guardado' : 'Guardar'}</span></button>
+            <button class="f btn-red play">${icon('play', 34)} Reproducir</button>
+            <button class="f btn-glass save">${icon(isLater(v.id) ? 'check' : 'plus', 30)} <span>${isLater(v.id) ? 'En Mi lista' : 'Mi lista'}</span></button>
           </div>
         </div>
       </div>`).join('')}
@@ -169,8 +176,8 @@ function hero(list) {
     sl.querySelector('.play').onclick = () => openWatch(v, list);
     sl.querySelector('.save').onclick = (e) => {
       const on = toggleLater(v);
-      e.currentTarget.innerHTML = `${icon(on ? 'playlistCheck' : 'playlistAdd', 30)} <span>${on ? 'Guardado' : 'Guardar'}</span>`;
-      toast(on ? 'Guardado en Ver más tarde' : 'Quitado de Ver más tarde');
+      e.currentTarget.innerHTML = `${icon(on ? 'check' : 'plus', 30)} <span>${on ? 'En Mi lista' : 'Mi lista'}</span>`;
+      toast(on ? 'Guardado en Mi lista' : 'Quitado de Mi lista');
     };
   });
   let cur = 0;
@@ -184,6 +191,34 @@ function hero(list) {
   return h;
 }
 
+// Categorías (usan la búsqueda real) y sección Descubre
+const CATS = [
+  ['Películas', 'películas tráiler 2026', 'movie'], ['Series', 'series tráiler oficial', 'tv'], ['Música', 'música 2026', 'music'],
+  ['Conciertos', 'concierto en vivo completo', 'mic'], ['Deportes', 'deportes resumen', 'sports'], ['Noticias', 'noticias hoy', 'news'],
+  ['Videojuegos', 'videojuegos', 'game'], ['Infantil', 'canciones infantiles', 'kids'], ['Tecnología', 'tecnología novedades', 'tech'],
+];
+function catChips() {
+  const r = el('<section class="row cat-row"><div class="row-scroll"></div></section>');
+  const box = r.querySelector('.row-scroll');
+  CATS.forEach(([l, q, ic]) => { const b = el(`<button class="f chip">${icon(ic, 28)}${esc(l)}</button>`); b.onclick = () => go('search', { q }); box.appendChild(b); });
+  const more = el(`<button class="f chip">${icon('compass', 28)}Más categorías</button>`);
+  more.onclick = () => go('search', {});
+  box.appendChild(more);
+  return r;
+}
+function discover() {
+  const tiles = [['Películas', 'películas tráiler 2026', 'movie', '#7a1020'], ['Series', 'series tráiler oficial', 'tv', '#3b2a8a'], ['Música', 'música 2026', 'music', '#8a1f6e'],
+    ['Deportes', 'deportes resumen', 'sports', '#16704a'], ['Infantil', 'canciones infantiles', 'kids', '#a8611a'], ['Tecnología', 'tecnología novedades', 'tech', '#1a5f8a']];
+  const r = el('<section class="row"><h2>Descubre<small>Explora por categoría</small></h2><div class="row-scroll"></div></section>');
+  tiles.forEach(([l, q, ic, c]) => {
+    const t = el(`<button class="f disc" style="background:linear-gradient(150deg,${c},#101114 85%)"><span class="disc-ic">${icon(ic, 90)}</span><b>${esc(l)}</b><small>Explorar ›</small></button>`);
+    t.onclick = () => go('search', { q });
+    r.querySelector('.row-scroll').appendChild(t);
+  });
+  return r;
+}
+const skeleton = () => '<div class="sk-card"></div><div class="sk-card"></div><div class="sk-card"></div><div class="sk-card"></div>';
+
 const interleave = (lists) => {
   const out = []; const seen = new Set(); const q = lists.map((l) => [...l]);
   while (q.some((l) => l.length)) q.forEach((l) => { const v = l.shift(); if (v && !seen.has(v.id)) { seen.add(v.id); out.push(v); } });
@@ -196,26 +231,30 @@ const routes = {
     const topics = interests(3);
     const mine = topics.length ? topics : ['música 2026', 'cumbia'];
     const rowsDef = [
-      ['Para ti', null],
       ['Música', 'música 2026'],
       ['Tendencias en Perú', 'tendencias perú'],
+      ['Películas', 'películas tráiler 2026'],
+      ['Conciertos', 'concierto en vivo completo'],
       ['Infantil', 'canciones infantiles'],
-      ['Películas', 'películas completas en español'],
       ['Deportes', 'deportes resumen'],
       ['Noticias', 'noticias hoy'],
     ];
-    const forYou = interleave(await Promise.all([
-      ...mine.map((q) => YT.search(q, { uploadDate: 'month' }).then((p) => p.videos).catch(() => [])),
-      ...store.subs.slice(0, 5).map((c) => YT.channelLatest(c.id, 4)),
-    ]));
+    const subsLists = await Promise.all(store.subs.slice(0, 5).map((c) => YT.channelLatest(c.id, 4)));
+    const forYou = interleave(await Promise.all(mine.map((q) => YT.search(q, { uploadDate: 'month' }).then((p) => p.videos).catch(() => []))).then((l) => [...l, ...subsLists]));
     const watched = new Set(store.history.map((v) => v.id));
     const fresh = forYou.filter((v) => !watched.has(v.id));
     view.innerHTML = '';
+    view.appendChild(catChips());
     if (fresh.length) view.appendChild(hero(fresh));
-    if (fresh.length > 5) view.appendChild(row('Para ti', fresh.slice(5, 25)));
-    if (store.history.length) view.appendChild(row('Seguir viendo', store.history.slice(0, 15)));
-    for (const [title, q] of rowsDef.slice(1)) {
-      const holder = el(`<section class="row"><h2>${esc(title)}</h2><div class="row-scroll">${loading()}</div></section>`);
+    // Continuar viendo: videos con posición guardada
+    const cont = store.history.filter((v) => !v.short && position(v.id) && v.seconds).slice(0, 15);
+    if (cont.length) view.appendChild(row('Continuar viendo', cont));
+    if (fresh.length > 5) view.appendChild(row('Tendencias para ti', fresh.slice(5, 25), 'Según lo que ves y buscas'));
+    view.appendChild(discover());
+    const recent = interleave(subsLists).filter((v) => !v.short).slice(0, 15);
+    if (recent.length) view.appendChild(row('Novedades de tus suscripciones', recent));
+    for (const [title, q] of rowsDef) {
+      const holder = el(`<section class="row"><h2>${esc(title)}</h2><div class="row-scroll">${skeleton()}</div></section>`);
       view.appendChild(holder);
       YT.search(q).then((p) => holder.replaceWith(row(title, p.videos.slice(0, 20)))).catch(() => holder.remove());
     }
