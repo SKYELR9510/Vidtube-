@@ -170,8 +170,9 @@ img { display: block; }
 .card:hover, .card:focus-visible { transform: translateY(-4px); }
 .thumb { position: relative; aspect-ratio: 16 / 9; border-radius: var(--r); overflow: hidden; background: var(--chip); transition: box-shadow .2s; }
 .card-short .thumb { aspect-ratio: 9 / 16; }
-.thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease, opacity .3s; opacity: 0; }
-.thumb img.ok { opacity: 1; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease, opacity .3s; }
+.card .thumb img { opacity: 0; }
+.card .thumb img.ok { opacity: 1; }
 .card:hover .thumb img { transform: scale(1.05); }
 .card:hover .thumb, .card:focus-visible .thumb { box-shadow: 0 14px 34px rgba(0, 0, 0, .45), 0 0 0 1px rgba(242, 13, 37, .55); }
 :root[data-theme="light"] .card:hover .thumb { box-shadow: 0 14px 30px rgba(16, 17, 20, .18), 0 0 0 1px rgba(242, 13, 37, .5); }

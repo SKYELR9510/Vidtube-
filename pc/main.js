@@ -55,7 +55,7 @@ async function runShots(win) {
   const dir = process.env.VIDTUBE_SHOTS;
   fs.mkdirSync(dir, { recursive: true });
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const shot = async (name) => fs.writeFileSync(path.join(dir, name + '.png'), (await win.webContents.capturePage()).toPNG());
+  const shot = async (name) => { const b = (await win.webContents.capturePage()).toPNG(); if (b.length) fs.writeFileSync(path.join(dir, name + '.png'), b); };
   win.webContents.on('console-message', (_e, level, msg) => fs.appendFileSync(path.join(dir, 'console.txt'), `[${level}] ${msg}\n`));
   await wait(1200); await shot('0-splash');
   await wait(22000); await shot('1-home');
