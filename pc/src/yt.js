@@ -77,6 +77,8 @@ async function mintPot(identifier) {
       const pot = await window.vtNative.mintPot(identifier);
       if (pot) { potCache.set(identifier, pot); log('token anti-bot listo (youtube.com)'); return pot; }
     } catch (e) { log('token (youtube.com) falló', String(e.message || e).slice(0, 160)); }
+    // Por seguridad, en la PC no se ejecuta código descargado dentro de la ventana principal
+    return null;
   }
   if (!minterPromise) minterPromise = getMinter().catch((e) => { minterPromise = null; throw e; });
   const minter = await minterPromise;

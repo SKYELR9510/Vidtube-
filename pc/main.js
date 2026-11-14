@@ -16,6 +16,14 @@ const UA = {
   MWEB: 'Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)',
 };
 
+/** Solo se abren en el navegador direcciones https de GitHub y YouTube. */
+function isSafeExternal(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && /(^|\.)(github\.com|githubusercontent\.com|youtube\.com|youtu\.be)$/.test(u.hostname);
+  } catch { return false; }
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1380,
@@ -37,11 +45,14 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadFile(path.join(__dirname, 'index.html'), { query: { v: app.getVersion() } });
-  // Links externos (descargar actualización, etc.) en el navegador
+  // Links externos (descargar actualización, etc.): solo https de sitios conocidos, en el navegador
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (isSafeExternal(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+  // La ventana nunca sale de la app (ni por un enlace ni por contenido inyectado)
+  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file://')) e.preventDefault(); });
+  win.webContents.on('will-attach-webview', (e) => e.preventDefault());
   // Solo para pruebas automáticas en GitHub: captura pantallas y cierra
   if (process.env.VIDTUBE_SHOTS) runShots(win);
   // F12 abre las herramientas de diagnóstico
@@ -56,7 +67,7 @@ async function runShots(win) {
   fs.mkdirSync(dir, { recursive: true });
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const shot = async (name) => { const b = (await win.webContents.capturePage()).toPNG(); if (b.length) fs.writeFileSync(path.join(dir, name + '.png'), b); };
-  win.webContents.on('console-message', (_e, level, msg) => fs.appendFileSync(path.join(dir, 'console.txt'), `[${level}] ${msg}\n`));
+  win.webContents.on('console-message', (e, level, msg) => fs.appendFileSync(path.join(dir, 'console.txt'), `[${e.level ?? level}] ${e.message ?? msg}\n`));
   await wait(1200); await shot('0-splash');
   await wait(22000); await shot('1-home');
   const js = (code) => win.webContents.executeJavaScript(code).catch((e) => fs.appendFileSync(path.join(dir, 'console.txt'), 'JS ' + e + '\n'));
@@ -110,7 +121,11 @@ function ensureBgWindow() {
   bgReady.catch(() => { bgReady = null; });
   return bgReady;
 }
-ipcMain.handle('mint-pot', async (_e, identifier) => {
+ipcMain.handle('mint-pot', async (e, identifier) => {
+  // Solo la ventana de la app puede pedirlo, y con un identificador de video válido
+  if (!e.senderFrame || !String(e.senderFrame.url).startsWith('file://')) throw new Error('origen no permitido');
+  identifier = String(identifier);
+  if (!/^[A-Za-z0-9_%=+\/.-]{1,256}$/.test(identifier)) throw new Error('identificador inválido');
   await ensureBgWindow();
   return bgWin.webContents.executeJavaScript(`window.__vtMint(${JSON.stringify(String(identifier))})`);
 });

@@ -8,10 +8,8 @@
     <description>Vidtube: videos sin anuncios</description>
     <author>Inversiones Silva</author>
     <access origin="*" subdomains="true"></access>
-    <tizen:allow-navigation>*</tizen:allow-navigation>
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
-    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
     <tizen:profile name="tv-samsung"/>
     <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
 </widget>

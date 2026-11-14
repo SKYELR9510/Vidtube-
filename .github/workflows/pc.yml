@@ -29,6 +29,9 @@ jobs:
           npm pkg set version=$VERSION
       - name: Instalar dependencias
         run: npm install --no-audit --no-fund
+      - name: Revisión de dependencias (npm audit)
+        continue-on-error: true
+        run: npm audit --audit-level=high
       - name: Versiones usadas
         shell: bash
         run: npm ls youtubei.js bgutils-js shaka-player electron || true

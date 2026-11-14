@@ -4,7 +4,7 @@ const fs = require('fs'); const path = require('path');
 app.whenReady().then(async () => {
   const dir = process.env.SHOTS; fs.mkdirSync(dir, { recursive: true });
   const w = new BrowserWindow({ width: 1920, height: 1080, useContentSize: true, show: true, webPreferences: { webSecurity: false } });
-  w.webContents.on('console-message', (_e, l, m) => fs.appendFileSync(path.join(dir, 'console.txt'), `[${l}] ${m}\n`));
+  w.webContents.on('console-message', (e, l, m) => fs.appendFileSync(path.join(dir, 'console.txt'), `[${e.level ?? l}] ${e.message ?? m}\n`));
   await w.loadFile(path.join(__dirname, 'dist', 'index.html'));
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const shot = async (n) => fs.writeFileSync(path.join(dir, n + '.png'), (await w.webContents.capturePage()).toPNG());

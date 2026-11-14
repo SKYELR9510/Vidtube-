@@ -106,7 +106,7 @@ object Updater {
             var size = 0L
             for (i in 0 until assets.length()) {
                 val a = assets.getJSONObject(i)
-                if (a.optString("name").endsWith(".apk")) {
+                if (a.optString("name").endsWith(".apk") && isTrustedUrl(a.optString("browser_download_url"))) {
                     url = a.optString("browser_download_url")
                     size = a.optLong("size")
                     break
@@ -156,6 +156,12 @@ object Updater {
                     }
                 }
             }
+            // El APK debe estar firmado con la misma clave que la app instalada
+            if (!sameSigner(context, file)) {
+                file.delete()
+                _state.value = State.Failed("La actualización no tiene la firma oficial de Vidtube y se descartó.", release)
+                return
+            }
             _state.value = State.ReadyToInstall(release, file)
             install(context, file)
         } catch (e: Exception) {
@@ -164,6 +170,38 @@ object Updater {
             _state.value = State.Failed("No se pudo descargar la actualización.", release)
         }
     }
+
+    /** Solo se descargan actualizaciones por https desde GitHub. */
+    private fun isTrustedUrl(url: String): Boolean = runCatching {
+        val u = Uri.parse(url)
+        val host = u.host ?: return false
+        u.scheme == "https" && (host == "github.com" || host.endsWith(".github.com") || host.endsWith(".githubusercontent.com"))
+    }.getOrDefault(false)
+
+    @Suppress("DEPRECATION")
+    private fun signaturesOf(context: Context, apk: File?): Set<String> {
+        val pm = context.packageManager
+        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val flags = android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+            if (apk == null) pm.getPackageInfo(context.packageName, flags) else pm.getPackageArchiveInfo(apk.path, flags)
+        } else {
+            val flags = android.content.pm.PackageManager.GET_SIGNATURES
+            if (apk == null) pm.getPackageInfo(context.packageName, flags) else pm.getPackageArchiveInfo(apk.path, flags)
+        } ?: return emptySet()
+        val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.signingInfo?.let { if (it.hasMultipleSigners()) it.apkContentsSigners else it.signingCertificateHistory }
+        } else info.signatures
+        return sigs.orEmpty().map { java.security.MessageDigest.getInstance("SHA-256").digest(it.toByteArray()).joinToString("") { b -> "%02x".format(b) } }.toSet()
+    }
+
+    /** true si el APK descargado es del mismo paquete y lo firmó la misma clave que la app instalada. */
+    private fun sameSigner(context: Context, apk: File): Boolean = runCatching {
+        val archive = context.packageManager.getPackageArchiveInfo(apk.path, 0) ?: return false
+        if (archive.packageName != context.packageName) return false
+        val mine = signaturesOf(context, null)
+        val theirs = signaturesOf(context, apk)
+        mine.isNotEmpty() && theirs.isNotEmpty() && mine.intersect(theirs).isNotEmpty()
+    }.getOrDefault(false)
 
     /** Abre el instalador de Android con el APK descargado. */
     fun install(context: Context, file: File) {

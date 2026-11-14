@@ -172,7 +172,7 @@ function card(v, opts = {}) {
   const c = el(`
     <div class="card ${v.short ? 'card-short' : ''} ${opts.resume ? 'card-resume' : ''}" tabindex="0" role="link" aria-label="${esc(v.title)}">
       <div class="thumb">
-        <img loading="lazy" decoding="async" src="${esc(v.thumb)}" alt="" onload="this.classList.add('ok')">
+        <img loading="lazy" decoding="async" src="${esc(v.thumb)}" alt="">
         ${opts.resume ? `<span class="play-ov">${icon('play', 30)}</span>` : ''}
         ${v.live ? '<span class="dur live"><i></i>EN VIVO</span>' : v.duration ? `<span class="dur">${esc(v.duration)}</span>` : ''}
         ${pr ? `<div class="prog"><i style="width:${pr.pct.toFixed(1)}%"></i></div>` : ''}
@@ -196,6 +196,9 @@ function card(v, opts = {}) {
     if (v.short) go('shorts', { start: v, list: opts.list }); else go('watch', { v });
   });
   c.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === c) c.click(); });
+  const img = c.querySelector('.thumb img');
+  const shown = () => img.classList.add('ok');
+  if (img.complete) shown(); else { img.addEventListener('load', shown, { once: true }); img.addEventListener('error', shown, { once: true }); }
   return c;
 }
 
@@ -301,7 +304,7 @@ function hero(list) {
   const items = list.slice(0, 5);
   const h = el(`<div class="hero" aria-roledescription="carrusel">${items.map((v, i) => `
       <div class="hero-slide ${i === 0 ? 'on' : ''}">
-        <img src="${esc(v.thumb.replace(/hq720|hqdefault|mqdefault/, 'maxresdefault'))}" onerror="this.onerror=null;this.src='${esc(v.thumb)}'" alt="">
+        <img src="${esc(v.thumb.replace(/hq720|hqdefault|mqdefault/, 'maxresdefault'))}" alt="">
         <div class="hero-shade"></div>
         <div class="hero-info">
           ${v.live ? '<span class="live-badge"><i></i>EN VIVO</span>' : '<span class="hero-kicker">Destacado</span>'}
@@ -322,6 +325,7 @@ function hero(list) {
     const v = items[i];
     sl.querySelector('.play').onclick = () => go('watch', { v });
     sl.querySelector('img').onclick = () => go('watch', { v });
+    sl.querySelector('img').addEventListener('error', (e) => { if (e.target.src !== v.thumb) e.target.src = v.thumb; }, { once: true });
     sl.querySelector('.save').onclick = (e) => {
       const on = toggleLater(v);
       e.currentTarget.innerHTML = `${icon(on ? 'check' : 'plus', 22)} <span>${on ? 'En Mi lista' : 'Mi lista'}</span>`;
