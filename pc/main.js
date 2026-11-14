@@ -66,6 +66,9 @@ async function runShots(win) {
   await js("document.querySelector('.menu-btn').click(); document.querySelector('#view').scrollTop = 0; document.querySelector('.avatar-btn').click()"); await wait(1200); await shot('4-collapsed-profile');
   await js("document.querySelector('.avatar-btn').click(); document.querySelector('.menu-btn').click()");
   await js("window.__vt.go('explore')"); await wait(2000); await shot('5-explore');
+  await js("window.__vt.go('home', {cat: 'peliculas'})"); await wait(14000); await shot('5b-peliculas');
+  await js("document.querySelector('#view').scrollTop = 700"); await wait(1500); await shot('5c-peliculas-lista');
+  await js("window.__vt.go('home', {cat: 'deportes'})"); await wait(12000); await shot('5d-deportes');
   await js("window.__vt.go('search', {q: 'cumbia'})"); await wait(9000); await shot('6-search');
   await js("document.querySelector('.grid .card').click()"); await wait(25000); await shot('7-watch');
   // Prueba del reproductor flotante: salir del video mientras se reproduce

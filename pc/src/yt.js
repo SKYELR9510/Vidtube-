@@ -202,7 +202,7 @@ function collect(list) {
 // ---------- Búsqueda ----------
 export async function search(query, opts = {}) {
   await init();
-  const s = await yt.search(query, { type: opts.type || 'video', upload_date: opts.uploadDate, sort_by: opts.sortBy });
+  const s = await yt.search(query, { type: opts.type || 'video', upload_date: opts.uploadDate, sort_by: opts.sortBy, duration: opts.duration });
   const page = { videos: collect(s.results || []), channels: [], more: null };
   page.channels = (s.results || []).filter((r) => r.type === 'Channel').map((c) => ({
     id: c.id || c.author?.id,
@@ -224,6 +224,44 @@ function wrapContinuation(s) {
     channels: [],
     more: s.has_continuation ? async () => wrapContinuation(await s.getContinuation()) : null,
   };
+}
+
+// ---------- Categorías generales (iguales para todos, no dependen de lo que ves) ----------
+export const CATEGORIES = {
+  peliculas: { label: 'Películas', q: 'película completa en español latino', duration: 'long', minSec: 3600, noTrailers: true },
+  series: { label: 'Series', q: 'serie completa capítulo 1 español latino', duration: 'long', minSec: 1200, noTrailers: true },
+  musica: { label: 'Música', q: 'música 2026', upload: 'week' },
+  conciertos: { label: 'Conciertos', q: 'concierto completo en vivo', duration: 'long', minSec: 1800 },
+  deportes: { label: 'Deportes', q: 'resumen deportes hoy', upload: 'week' },
+  noticias: { label: 'Noticias', q: 'noticias de hoy', upload: 'today' },
+  videojuegos: { label: 'Videojuegos', q: 'videojuegos', upload: 'week' },
+  infantil: { label: 'Infantil', q: 'canciones infantiles' },
+  tecnologia: { label: 'Tecnología', q: 'tecnología novedades', upload: 'month' },
+  envivo: { label: 'En vivo', q: 'en vivo ahora', live: true },
+  podcasts: { label: 'Podcasts', q: 'podcast', upload: 'week' },
+};
+const TRAILER = /tr[aá]iler|teaser|avance oficial|reacci[oó]n|\breact|resumen de la pel|explicad/i;
+/** Videos de una categoría general: películas y series completas (sin tráileres), deportes y noticias actuales… */
+export async function category(id) {
+  const c = CATEGORIES[id];
+  if (!c) return search(id);
+  const keep = (v) => !v.short && (c.live ? true : !v.live) && (!c.minSec || (v.seconds || 0) >= c.minSec) && !(c.noTrailers && TRAILER.test(v.title || ''));
+  const filt = (p) => ({ videos: p.videos.filter(keep), more: p.more ? async () => filt(await p.more()) : null });
+  const run = async (upload) => {
+    let first;
+    try { first = await search(c.q, { uploadDate: upload, duration: c.duration }); }
+    catch (e) { first = await search(c.q, { uploadDate: upload }); }
+    let page = filt(first);
+    let videos = page.videos;
+    let more = page.more;
+    for (let i = 0; videos.length < 12 && more && i < 3; i++) { const n = await more(); videos = videos.concat(n.videos); more = n.more; }
+    const seen = new Set();
+    return { videos: videos.filter((v) => !seen.has(v.id) && seen.add(v.id)), more };
+  };
+  const r = await run(c.upload);
+  // Si en ese rango de fechas hay muy poco, se amplía
+  if (r.videos.length < 6 && c.upload) { const r2 = await run(c.upload === 'today' ? 'week' : 'month'); if (r2.videos.length > r.videos.length) return r2; }
+  return r;
 }
 
 export async function searchAll(query) {

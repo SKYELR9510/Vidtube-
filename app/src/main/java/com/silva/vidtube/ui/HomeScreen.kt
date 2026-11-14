@@ -76,41 +76,52 @@ import kotlinx.coroutines.coroutineScope
 
 data class HomeChip(val id: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector? = null)
 
-// Categorías fijas (todas usan la búsqueda o las tendencias reales de YouTube)
+// Categorías generales: muestran lo actual de YouTube para todos, no según lo que tú ves
 private val fixedChips = listOf(
-    HomeChip("trending_movies_and_shows", "Películas", Icons.Outlined.Movie),
-    HomeChip("q:series tráiler oficial", "Series", Icons.Outlined.Tv),
+    HomeChip("c:peliculas", "Películas", Icons.Outlined.Movie),
+    HomeChip("c:series", "Series", Icons.Outlined.Tv),
     HomeChip("trending_music", "Música", Icons.Outlined.MusicNote),
-    HomeChip("q:concierto en vivo completo", "Conciertos", Icons.Outlined.Mic),
-    HomeChip("q:deportes resumen", "Deportes", Icons.Outlined.SportsSoccer),
-    HomeChip("q:noticias hoy", "Noticias", Icons.Outlined.Newspaper),
+    HomeChip("c:conciertos", "Conciertos", Icons.Outlined.Mic),
+    HomeChip("c:deportes", "Deportes", Icons.Outlined.SportsSoccer),
+    HomeChip("c:noticias", "Noticias", Icons.Outlined.Newspaper),
     HomeChip("trending_gaming", "Videojuegos", Icons.Outlined.SportsEsports),
-    HomeChip("q:canciones infantiles", "Infantil", Icons.Outlined.ChildCare),
-    HomeChip("q:tecnología novedades", "Tecnología", Icons.Outlined.Memory),
-    HomeChip("mixes", "Mixes", Icons.Outlined.LibraryMusic),
+    HomeChip("c:infantil", "Infantil", Icons.Outlined.ChildCare),
+    HomeChip("c:tecnologia", "Tecnología", Icons.Outlined.Memory),
     HomeChip("live", "En vivo", Icons.Outlined.Sensors),
     HomeChip("trending_podcasts_episodes", "Podcasts", Icons.Outlined.Podcasts),
 )
 
-/** Tarjetas de la sección Descubre (abren la categoría correspondiente). */
-val discoverTiles = listOf(
-    DiscoverTile("trending_movies_and_shows", "Películas", Icons.Outlined.Movie, 0xFF7A1020),
-    DiscoverTile("q:series tráiler oficial", "Series", Icons.Outlined.Tv, 0xFF3B2A8A),
-    DiscoverTile("trending_music", "Música", Icons.Outlined.MusicNote, 0xFF8A1F6E),
-    DiscoverTile("q:deportes resumen", "Deportes", Icons.Outlined.SportsSoccer, 0xFF16704A),
-    DiscoverTile("q:canciones infantiles", "Infantil", Icons.Outlined.ChildCare, 0xFFA8611A),
-    DiscoverTile("q:tecnología novedades", "Tecnología", Icons.Outlined.Memory, 0xFF1A5F8A),
+/** Cómo se busca cada categoría general (texto, duración mínima, sin tráileres, antigüedad máxima en días). */
+private data class CategoryDef(val query: String, val minSec: Long = 0, val noTrailers: Boolean = false, val maxAgeDays: Long = 3650)
+private val categoryDefs = mapOf(
+    "peliculas" to CategoryDef("película completa en español latino", minSec = 3600, noTrailers = true),
+    "series" to CategoryDef("serie completa capítulo 1 español latino", minSec = 1200, noTrailers = true),
+    "conciertos" to CategoryDef("concierto completo en vivo", minSec = 1800),
+    "deportes" to CategoryDef("resumen deportes hoy", maxAgeDays = 7),
+    "noticias" to CategoryDef("noticias de hoy", maxAgeDays = 3),
+    "infantil" to CategoryDef("canciones infantiles"),
+    "tecnologia" to CategoryDef("tecnología novedades", maxAgeDays = 60),
 )
 
-/** "Todo" + categorías fijas + tus temas (según búsquedas y canales que más ves). */
-fun buildHomeChips(): List<HomeChip> {
-    val interests = Library.interests(4).map { HomeChip("i:" + it.query, it.label, Icons.Outlined.History) }
-    return listOf(HomeChip("todo", "Todo", Icons.Outlined.Apps)) + fixedChips + interests
-}
+/** Tarjetas de la sección Descubre (abren la categoría correspondiente). */
+val discoverTiles = listOf(
+    DiscoverTile("c:peliculas", "Películas", Icons.Outlined.Movie, 0xFF7A1020),
+    DiscoverTile("c:series", "Series", Icons.Outlined.Tv, 0xFF3B2A8A),
+    DiscoverTile("trending_music", "Música", Icons.Outlined.MusicNote, 0xFF8A1F6E),
+    DiscoverTile("c:deportes", "Deportes", Icons.Outlined.SportsSoccer, 0xFF16704A),
+    DiscoverTile("c:infantil", "Infantil", Icons.Outlined.ChildCare, 0xFFA8611A),
+    DiscoverTile("c:tecnologia", "Tecnología", Icons.Outlined.Memory, 0xFF1A5F8A),
+)
+
+/** "Todo" + categorías generales. */
+fun buildHomeChips(): List<HomeChip> = listOf(HomeChip("todo", "Todo", Icons.Outlined.Apps)) + fixedChips
 
 /** Contenido de una categoría del Inicio (todas menos "Todo"). */
 suspend fun loadChip(id: String): PagedResult = when {
     id.startsWith("i:") -> Repository.freshSearch(id.removePrefix("i:"))
+    id.startsWith("c:") -> categoryDefs[id.removePrefix("c:")]?.let {
+        Repository.categorySearch(it.query, it.minSec, it.noTrailers, it.maxAgeDays)
+    } ?: Repository.search(id.removePrefix("c:"))
     id.startsWith("q:") -> Repository.freshSearch(id.removePrefix("q:"), maxAgeDays = 60).let {
         if (it.items.size < 8) Repository.search(id.removePrefix("q:")) else it
     }
@@ -219,7 +230,6 @@ fun HomeScreen(
 
     Column(Modifier.fillMaxSize().background(VColors.Background)) {
         VTopBar(leading = { VidtubeLogo() }) {
-            TopIcon(Icons.Outlined.Search, "Buscar", onSearch)
             ProfileButton(onLibrary = onLibrary, onSettings = onSettings)
         }
         UpdateBanner()

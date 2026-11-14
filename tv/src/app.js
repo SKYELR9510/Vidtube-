@@ -196,26 +196,27 @@ function hero(list) {
 
 // Categorías (usan la búsqueda real) y sección Descubre
 const CATS = [
-  ['Películas', 'películas tráiler 2026', 'movie'], ['Series', 'series tráiler oficial', 'tv'], ['Música', 'música 2026', 'music'],
-  ['Conciertos', 'concierto en vivo completo', 'mic'], ['Deportes', 'deportes resumen', 'sports'], ['Noticias', 'noticias hoy', 'news'],
-  ['Videojuegos', 'videojuegos', 'game'], ['Infantil', 'canciones infantiles', 'kids'], ['Tecnología', 'tecnología novedades', 'tech'],
+  ['Películas', 'peliculas', 'movie'], ['Series', 'series', 'tv'], ['Música', 'musica', 'music'],
+  ['Conciertos', 'conciertos', 'mic'], ['Deportes', 'deportes', 'sports'], ['Noticias', 'noticias', 'news'],
+  ['Videojuegos', 'videojuegos', 'game'], ['Infantil', 'infantil', 'kids'], ['Tecnología', 'tecnologia', 'tech'],
+  ['En vivo', 'envivo', 'live'],
 ];
 function catChips() {
   const r = el('<section class="row cat-row"><div class="row-scroll"></div></section>');
   const box = r.querySelector('.row-scroll');
-  CATS.forEach(([l, q, ic]) => { const b = el(`<button class="f chip">${icon(ic, 28)}${esc(l)}</button>`); b.onclick = () => go('search', { q }); box.appendChild(b); });
+  CATS.forEach(([l, id, ic]) => { const b = el(`<button class="f chip">${icon(ic, 28)}${esc(l)}</button>`); b.onclick = () => go('cat', { id }); box.appendChild(b); });
   const more = el(`<button class="f chip">${icon('compass', 28)}Más categorías</button>`);
   more.onclick = () => go('search', {});
   box.appendChild(more);
   return r;
 }
 function discover() {
-  const tiles = [['Películas', 'películas tráiler 2026', 'movie', '#7a1020'], ['Series', 'series tráiler oficial', 'tv', '#3b2a8a'], ['Música', 'música 2026', 'music', '#8a1f6e'],
-    ['Deportes', 'deportes resumen', 'sports', '#16704a'], ['Infantil', 'canciones infantiles', 'kids', '#a8611a'], ['Tecnología', 'tecnología novedades', 'tech', '#1a5f8a']];
+  const tiles = [['Películas', 'peliculas', 'movie', '#7a1020'], ['Series', 'series', 'tv', '#3b2a8a'], ['Música', 'musica', 'music', '#8a1f6e'],
+    ['Deportes', 'deportes', 'sports', '#16704a'], ['Infantil', 'infantil', 'kids', '#a8611a'], ['Tecnología', 'tecnologia', 'tech', '#1a5f8a']];
   const r = el('<section class="row"><h2>Descubre<small>Explora por categoría</small></h2><div class="row-scroll"></div></section>');
   tiles.forEach(([l, q, ic, c]) => {
     const t = el(`<button class="f disc" style="background:linear-gradient(150deg,${c},#101114 85%)"><span class="disc-ic">${icon(ic, 90)}</span><b>${esc(l)}</b><small>Explorar ›</small></button>`);
-    t.onclick = () => go('search', { q });
+    t.onclick = () => go('cat', { id: q });
     r.querySelector('.row-scroll').appendChild(t);
   });
   return r;
@@ -234,13 +235,14 @@ const routes = {
     const topics = interests(3);
     const mine = topics.length ? topics : ['música 2026', 'cumbia'];
     const rowsDef = [
-      ['Música', 'música 2026'],
+      ['Música', '#musica'],
       ['Tendencias en Perú', 'tendencias perú'],
-      ['Películas', 'películas tráiler 2026'],
-      ['Conciertos', 'concierto en vivo completo'],
-      ['Infantil', 'canciones infantiles'],
-      ['Deportes', 'deportes resumen'],
-      ['Noticias', 'noticias hoy'],
+      ['Películas completas', '#peliculas'],
+      ['Series', '#series'],
+      ['Deportes hoy', '#deportes'],
+      ['Noticias de hoy', '#noticias'],
+      ['Conciertos', '#conciertos'],
+      ['Infantil', '#infantil'],
     ];
     const subsLists = await Promise.all(store.subs.slice(0, 5).map((c) => YT.channelLatest(c.id, 4)));
     const forYou = interleave(await Promise.all(mine.map((q) => YT.search(q, { uploadDate: 'month' }).then((p) => p.videos).catch(() => []))).then((l) => [...l, ...subsLists]));
@@ -259,8 +261,16 @@ const routes = {
     for (const [title, q] of rowsDef) {
       const holder = el(`<section class="row"><h2>${esc(title)}</h2><div class="row-scroll">${skeleton()}</div></section>`);
       view.appendChild(holder);
-      YT.search(q).then((p) => holder.replaceWith(row(title, p.videos.slice(0, 20)))).catch(() => holder.remove());
+      (q.startsWith('#') ? YT.category(q.slice(1)) : YT.search(q)).then((p) => p.videos.length ? holder.replaceWith(row(title, p.videos.slice(0, 20))) : holder.remove()).catch(() => holder.remove());
     }
+  },
+
+  async cat({ id }) {
+    const c = YT.CATEGORIES[id] || { label: id };
+    view.innerHTML = `<h1 class="page-title">${esc(c.label)}</h1><div class="row-scroll">${skeleton()}</div>`;
+    const p = await YT.category(id);
+    view.innerHTML = `<h1 class="page-title">${esc(c.label)}</h1>`;
+    view.appendChild(p.videos.length ? grid(p.videos) : el('<div class="empty"><h2>No hay videos ahora</h2></div>'));
   },
 
   async search({ q }) {
@@ -299,7 +309,8 @@ const routes = {
     const g = el('<section class="row"><h2>Explorar categorías</h2><div class="cats"></div></section>');
     cats.forEach(([l, qq, ic, a, b]) => {
       const t = el(`<button class="f cat" style="background:linear-gradient(135deg,${a},${b})">${icon(ic, 44)}<span>${esc(l)}</span></button>`);
-      t.onclick = () => go('search', { q: qq });
+      const map = { 'Películas': 'peliculas', 'Series': 'series', 'Conciertos': 'conciertos', 'Deportes': 'deportes', 'Noticias': 'noticias', 'Infantil': 'infantil', 'Música': 'musica', 'Videojuegos': 'videojuegos' };
+      t.onclick = () => (map[l] ? go('cat', { id: map[l] }) : go('search', { q: qq }));
       g.querySelector('.cats').appendChild(t);
     });
     body.appendChild(g);

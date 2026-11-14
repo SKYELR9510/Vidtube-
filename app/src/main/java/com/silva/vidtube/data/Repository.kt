@@ -97,19 +97,40 @@ object Repository {
         freshPage(handler, info.relatedItems, info.nextPage, maxAgeDays, pagesLeft = 2)
     }
 
+    private val trailerWords = Regex("(?i)tr[aá]iler|teaser|avance oficial|reacci[oó]n|react|resumen de la pel|explicad")
+
+    /**
+     * Búsqueda para una categoría general (no depende de lo que ves): descarta Shorts, videos
+     * más cortos que [minSec] y, si se pide, los tráileres (para películas y series completas).
+     */
+    suspend fun categorySearch(
+        query: String,
+        minSec: Long = 0,
+        noTrailers: Boolean = false,
+        maxAgeDays: Long = 3650,
+    ): PagedResult = withContext(Dispatchers.IO) {
+        val handler = yt.searchQHFactory.fromQuery(query, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
+        val info = SearchInfo.getInfo(yt, handler)
+        val keep: (VideoItem) -> Boolean = { v ->
+            v.durationSec >= minSec && !(noTrailers && trailerWords.containsMatchIn(v.title))
+        }
+        freshPage(handler, info.relatedItems, info.nextPage, maxAgeDays, pagesLeft = if (minSec > 0) 4 else 2, keep = keep)
+    }
+
     private fun freshPage(
         handler: SearchQueryHandler,
         items: List<org.schabi.newpipe.extractor.InfoItem>,
         next: Page?,
         maxAgeDays: Long,
         pagesLeft: Int,
+        keep: (VideoItem) -> Boolean = { true },
     ): PagedResult {
         var all = items
         var page = next
         var left = pagesLeft
         fun filtered() = all.filterIsInstance<StreamInfoItem>()
             .map { VideoItem.from(it) }
-            .filter { !it.isShort && !it.isLive && (it.ageDays ?: 0) <= maxAgeDays }
+            .filter { !it.isShort && !it.isLive && (it.ageDays ?: 0) <= maxAgeDays && keep(it) }
         // Si salió muy poco reciente, traemos una o dos páginas más
         while (filtered().size < 12 && left > 0 && page != null && Page.isValid(page)) {
             val p = SearchInfo.getMoreItems(yt, handler, page)
@@ -126,7 +147,7 @@ object Repository {
             ({
                 withContext(Dispatchers.IO) {
                     val p = SearchInfo.getMoreItems(yt, handler, p0)
-                    freshPage(handler, p.items, p.nextPage, maxAgeDays, pagesLeft = 1)
+                    freshPage(handler, p.items, p.nextPage, maxAgeDays, pagesLeft = 1, keep = keep)
                 }
             })
         } else null

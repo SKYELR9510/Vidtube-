@@ -22,7 +22,11 @@ swipe_up; shot 02-inicio-secciones
 swipe_up; shot 03-descubre
 swipe_up; shot 04-recomendado
 tap Explorar last 540 $BAR; sleep 5; shot 05-explorar
-tap Conciertos first 810 900; sleep 12; shot 06-busqueda
+tap Películas first 148 300; sleep 15; shot 06-peliculas
+swipe_up; shot 06b-peliculas-lista
+A shell input keyevent KEYCODE_BACK; sleep 2
+tap Explorar last 540 $BAR; sleep 4
+tap Deportes first 810 470; sleep 12; shot 06c-deportes
 A shell input keyevent KEYCODE_BACK; sleep 2
 tap Inicio last 108 $BAR; sleep 4
 A shell input tap 540 1500; sleep 20; shot 07-video

@@ -350,20 +350,19 @@ function hero(list) {
 // ---------- Contenido del Inicio ----------
 // Cada categoría usa la búsqueda real de YouTube
 const CATS = [
-  ['todo', 'Todo', 'apps'], ['películas tráiler 2026', 'Películas', 'movie'], ['series tráiler oficial', 'Series', 'tv'],
-  ['música 2026', 'Música', 'music'], ['concierto en vivo completo', 'Conciertos', 'mic'], ['deportes resumen', 'Deportes', 'sports'],
-  ['noticias hoy', 'Noticias', 'news'], ['videojuegos', 'Videojuegos', 'game'], ['canciones infantiles', 'Infantil', 'kids'],
-  ['tecnología novedades', 'Tecnología', 'tech'],
+  ['todo', 'Todo', 'apps'], ['peliculas', 'Películas', 'movie'], ['series', 'Series', 'tv'],
+  ['musica', 'Música', 'music'], ['conciertos', 'Conciertos', 'mic'], ['deportes', 'Deportes', 'sports'],
+  ['noticias', 'Noticias', 'news'], ['videojuegos', 'Videojuegos', 'game'], ['infantil', 'Infantil', 'kids'],
+  ['tecnologia', 'Tecnología', 'tech'], ['envivo', 'En vivo', 'live'], ['podcasts', 'Podcasts', 'mic'],
 ];
 const DISCOVER = [
-  ['películas tráiler 2026', 'Películas', 'movie', '#7a1020'], ['series tráiler oficial', 'Series', 'tv', '#3b2a8a'],
-  ['música 2026', 'Música', 'music', '#8a1f6e'], ['deportes resumen', 'Deportes', 'sports', '#16704a'],
-  ['canciones infantiles', 'Infantil', 'kids', '#a8611a'], ['tecnología novedades', 'Tecnología', 'tech', '#1a5f8a'],
+  ['peliculas', 'Películas', 'movie', '#7a1020'], ['series', 'Series', 'tv', '#3b2a8a'],
+  ['musica', 'Música', 'music', '#8a1f6e'], ['deportes', 'Deportes', 'sports', '#16704a'],
+  ['infantil', 'Infantil', 'kids', '#a8611a'], ['tecnologia', 'Tecnología', 'tech', '#1a5f8a'],
 ];
 const catLabel = (cat) => CATS.find((c) => c[0] === cat)?.[1] || cat;
 function catChips(cat) {
-  const extra = interests(3).filter((q) => !CATS.some((c) => c[0] === q)).map((q) => [q, q, 'history']);
-  const row = chips([...CATS, ...extra], cat, (c) => go('home', { cat: c }, false));
+  const row = chips(CATS, cat, (c) => go('home', { cat: c }, false));
   row.classList.add('cat-chips');
   const more = el(`<button class="chip chip-more">${icon('compass', 18)}<span>Más categorías</span></button>`);
   more.onclick = () => go('explore');
@@ -389,12 +388,7 @@ const interleave = (lists) => {
 };
 async function loadHome(cat) {
   const watched = new Set(store.history.map((v) => v.id));
-  if (cat !== 'todo') {
-    const q = cat === 'mix' ? 'mix ' + (interests(1)[0] || 'música') : cat;
-    const p = await YT.search(q, { uploadDate: cat === 'en vivo ahora' ? undefined : 'month' });
-    if (p.videos.length < 8) return YT.search(q);
-    return p;
-  }
+  if (cat !== 'todo') return YT.category(cat);
   // Todo = tus temas + lo nuevo de tus suscripciones + algo de música y tendencias
   const topics = interests(3);
   const base = topics.length ? topics : ['música 2026', 'cumbia', 'reggaeton'];
@@ -453,7 +447,8 @@ const routes = {
     v.appendChild(el(`<h1 class="page-title">${esc(title)}</h1>`));
     const body = el(`<div>${skeleton('grid')}</div>`);
     v.appendChild(body);
-    const queries = cat === 'todo' ? ['música 2026', 'videojuegos', 'películas tráiler', 'podcast', 'tendencias'] : [cat];
+    if (cat !== 'todo') { const p = await YT.category(cat); body.innerHTML = ''; return infinite(body, p); }
+    const queries = ['música 2026', 'videojuegos', 'tendencias perú', 'podcast', 'deportes resumen'];
     const lists = await Promise.all(queries.map((q) => YT.search(q).catch(() => ({ videos: [] }))));
     body.innerHTML = '';
     return infinite(body, { videos: interleave(lists.map((l) => l.videos)), more: lists[0].more });
@@ -483,17 +478,16 @@ const routes = {
   async explore(v) {
     v.appendChild(section('Explorar categorías'));
     const cats = [
-      ['Películas', 'películas completas en español', 'movie', '#7A1F2B', '#2A0A10'],
-      ['Series', 'series tráiler oficial', 'tv', '#3b2a8a', '#120b33'],
-      ['Conciertos', 'concierto en vivo completo', 'mic', '#8a1f6e', '#2b0a22'],
-      ['En vivo ahora', 'en vivo ahora', 'live', '#b0101f', '#3a050b'],
-      ['Podcasts', 'podcast', 'mic', '#4a4f5a', '#15171b'],
-      ['Mixes para ti', 'mix ' + (interests(1)[0] || 'música'), 'music', '#6d2bb0', '#200b38'],
-      ['Videojuegos', 'videojuegos gameplay', 'game', '#2346B8', '#0B1640'],
-      ['Música', 'música 2026', 'music', '#8E2DC6', '#2B0B42'],
-      ['Deportes', 'deportes resumen', 'sports', '#1F8A4C', '#0A2E19'],
-      ['Noticias', 'noticias hoy', 'news', '#B5462A', '#3A130A'],
-      ['Infantil', 'canciones infantiles', 'kids', '#E0912B', '#4A2A06'],
+      ['Películas', '#peliculas', 'movie', '#7A1F2B', '#2A0A10'],
+      ['Series', '#series', 'tv', '#3b2a8a', '#120b33'],
+      ['Conciertos', '#conciertos', 'mic', '#8a1f6e', '#2b0a22'],
+      ['En vivo ahora', '#envivo', 'live', '#b0101f', '#3a050b'],
+      ['Podcasts', '#podcasts', 'mic', '#4a4f5a', '#15171b'],
+      ['Videojuegos', '#videojuegos', 'game', '#2346B8', '#0B1640'],
+      ['Música', '#musica', 'music', '#8E2DC6', '#2B0B42'],
+      ['Deportes', '#deportes', 'sports', '#1F8A4C', '#0A2E19'],
+      ['Noticias', '#noticias', 'news', '#B5462A', '#3A130A'],
+      ['Infantil', '#infantil', 'kids', '#E0912B', '#4A2A06'],
       ['Ciencia y tecnología', 'ciencia y tecnología', 'science', '#1B8FA6', '#06303A'],
       ['Viajes y estilo de vida', 'viajes vlog', 'travel', '#2B6FD6', '#0A2450'],
       ['Comida y recetas', 'recetas fáciles', 'food', '#C7502A', '#43160A'],
@@ -501,7 +495,7 @@ const routes = {
     const g = el('<div class="cats"></div>');
     cats.forEach(([label, q, ic, a, b]) => {
       const t = el(`<button class="cat" style="background:linear-gradient(135deg,${a},${b})">${icon(ic, 34)}<span>${esc(label)}</span></button>`);
-      t.onclick = () => go('search', { q });
+      t.onclick = () => (q.startsWith('#') ? go('home', { cat: q.slice(1) }) : go('search', { q }));
       g.appendChild(t);
     });
     v.appendChild(g);
