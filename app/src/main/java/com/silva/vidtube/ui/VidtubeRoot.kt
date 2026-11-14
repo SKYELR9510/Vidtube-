@@ -134,6 +134,12 @@ fun VidtubeRoot(isInPip: Boolean) {
                 composable("home") {
                     HomeScreen(openVideo, openChannel, openSearch, openSettings, onMore = { id, title ->
                         nav.navigate("more/" + Uri.encode(id) + "/" + Uri.encode(title))
+                    }, onLibrary = {
+                        nav.navigate("library") {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     })
                 }
                 composable("more/{id}/{title}") { entry ->

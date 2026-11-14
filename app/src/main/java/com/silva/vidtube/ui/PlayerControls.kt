@@ -403,7 +403,7 @@ fun NeonSeekBar(position: Long, buffered: Long, duration: Long, thick: Boolean, 
             drawLine(Color(0x40FFFFFF), Offset(0f, y), Offset(size.width, y), stroke, StrokeCap.Round)
             drawLine(Color(0x66FFFFFF), Offset(0f, y), Offset(size.width * bufferedFraction, y), stroke, StrokeCap.Round)
             if (end > 0f) {
-                val neon = Brush.horizontalGradient(listOf(Color(0xFFFF4D5A), Color(0xFFFF1E2D)), 0f, end.coerceAtLeast(1f))
+                val neon = Brush.horizontalGradient(listOf(Color(0xFFFF3A4C), Color(0xFFF20D25)), 0f, end.coerceAtLeast(1f))
                 // Brillo (capas anchas y transparentes) + línea sólida
                 drawLine(VColors.Red.copy(alpha = 0.18f), Offset(0f, y), Offset(end, y), stroke * 4, StrokeCap.Round)
                 drawLine(VColors.Red.copy(alpha = 0.35f), Offset(0f, y), Offset(end, y), stroke * 2.2f, StrokeCap.Round)

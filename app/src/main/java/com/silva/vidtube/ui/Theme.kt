@@ -33,22 +33,25 @@ internal val lightTheme = mutableStateOf(false)
 object VColors {
     private val light get() = lightTheme.value
 
-    val Background get() = if (light) Color(0xFFFFFFFF) else Color(0xFF09090B)
-    val Surface get() = if (light) Color(0xFFF3F3F5) else Color(0xFF16161A)
-    val Card get() = if (light) Color(0xFFF6F6F8) else Color(0xFF131317)
-    val Chip get() = if (light) Color(0xFFEDEDF0) else Color(0xFF212127)
+    // Identidad cinematográfica: negro profundo, negro carbón, plata y rojo solo como acento
+    val Background get() = if (light) Color(0xFFF4F5F7) else Color(0xFF08090B)
+    val Surface get() = if (light) Color(0xFFFFFFFF) else Color(0xFF101114)
+    val Card get() = if (light) Color(0xFFFFFFFF) else Color(0xFF101114)
+    val Raise get() = if (light) Color(0xFFFFFFFF) else Color(0xFF16181C)
+    val Chip get() = if (light) Color(0xFFE9EBEE) else Color(0xFF1B1D22)
     val ChipSelected get() = Red
-    val Text get() = if (light) Color(0xFF121215) else Color(0xFFF5F5F7)
-    val Secondary get() = if (light) Color(0xFF606068) else Color(0xFFA7A7B0)
-    val Divider get() = if (light) Color(0xFFE2E2E6) else Color(0xFF26262C)
+    val Text get() = if (light) Color(0xFF101114) else Color(0xFFFFFFFF)
+    val Secondary get() = if (light) Color(0xFF4F545C) else Color(0xFFBFC3CA)
+    val Muted get() = if (light) Color(0xFF6B7079) else Color(0xFF8B9099)
+    val Divider get() = if (light) Color(0x1A101114) else Color(0x1ABFC3CA)
+    val Silver = Color(0xFFBFC3CA)
 
-    // Identidad: rojo neón del logo
-    val Red = Color(0xFFFF1E2D)
-    val RedDeep = Color(0xFFB00014)
-    val RedGlow = Color(0x66FF1E2D)
+    val Red = Color(0xFFF20D25)
+    val RedDeep = Color(0xFFA8071A)
+    val RedGlow = Color(0x66F20D25)
 
     /** Degradado rojo de los botones principales. */
-    val RedGradient get() = Brush.horizontalGradient(listOf(Color(0xFFFF3B3B), Red, RedDeep))
+    val RedGradient get() = Brush.linearGradient(listOf(Color(0xFFFF2B40), Red, Color(0xFFB3081B)))
 }
 
 @Composable

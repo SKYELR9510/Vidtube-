@@ -46,6 +46,7 @@ fun FeedList(
             }
         }
         when {
+            paged.loading && !paged.refreshing && items.isEmpty() -> item("loading") { SkeletonFeed() }
             paged.loading && !paged.refreshing -> item("loading") { LoadingView() }
             paged.error != null && items.isEmpty() -> item("error") {
                 ErrorView(paged.error ?: "", onRetry = { paged.refresh() })

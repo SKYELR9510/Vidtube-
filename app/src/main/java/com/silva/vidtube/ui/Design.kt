@@ -30,7 +30,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
+import coil.compose.AsyncImage
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Home
@@ -144,22 +147,22 @@ fun VBottomBar(current: String?, onSelect: (String) -> Unit) {
                         if (sel) {
                             Box(
                                 Modifier
-                                    .size(width = 46.dp, height = 30.dp)
+                                    .size(width = 52.dp, height = 30.dp)
                                     .clip(RoundedCornerShape(15.dp))
-                                    .background(VColors.RedGlow.copy(alpha = 0.22f))
+                                    .background(VColors.RedGradient)
                             )
                         }
                         Icon(
                             if (sel) tab.selected else tab.normal,
                             tab.label,
-                            tint = if (sel) VColors.Red else VColors.Text,
+                            tint = if (sel) Color.White else VColors.Secondary,
                             modifier = Modifier.size(25.dp),
                         )
                     }
                     Spacer(Modifier.height(2.dp))
                     Text(
                         tab.label,
-                        color = if (sel) VColors.Red else VColors.Secondary,
+                        color = if (sel) VColors.Text else VColors.Secondary,
                         fontSize = 11.sp,
                         fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
@@ -170,25 +173,28 @@ fun VBottomBar(current: String?, onSelect: (String) -> Unit) {
     }
 }
 
-/** Título de sección con "Ver más ›" opcional. */
+/** Título de sección con subtítulo y "Ver todo ›" opcionales. */
 @Composable
-fun SectionTitle(title: String, onMore: (() -> Unit)? = null) {
+fun SectionTitle(title: String, onMore: (() -> Unit)? = null, subtitle: String? = null) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 16.dp, end = 10.dp, top = 14.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 10.dp, top = 20.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.Bottom,
     ) {
-        Text(title, color = VColors.Text, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = VColors.Text, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
+            if (subtitle != null) Text(subtitle, color = VColors.Muted, fontSize = 12.sp)
+        }
         if (onMore != null) {
             Row(Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onMore).padding(6.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                Text("Ver más", color = VColors.Secondary, fontSize = 13.sp)
+                Text("Ver todo", color = VColors.Secondary, fontSize = 13.sp)
                 Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = VColors.Secondary, modifier = Modifier.size(18.dp))
             }
         }
     }
 }
 
-/** Video destacado grande del Inicio, con botones Reproducir y Guardar. */
+/** Banner cinematográfico del Inicio: Reproducir, Mi lista e indicador EN VIVO. */
 @Composable
 fun HeroCard(video: VideoItem, onPlay: () -> Unit, onChannel: (String) -> Unit) {
     val later by Library.watchLater.collectAsState()
@@ -197,30 +203,50 @@ fun HeroCard(video: VideoItem, onPlay: () -> Unit, onChannel: (String) -> Unit) 
         Modifier
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .fillMaxWidth()
-            .aspectRatio(16f / 10.5f)
-            .clip(RoundedCornerShape(18.dp))
-            .border(1.dp, Brush.linearGradient(listOf(VColors.Red.copy(alpha = 0.7f), Color.Transparent, VColors.Red.copy(alpha = 0.35f))), RoundedCornerShape(18.dp))
+            .aspectRatio(16f / 11f)
+            .clip(RoundedCornerShape(20.dp))
+            .border(1.dp, Color(0x14BFC3CA), RoundedCornerShape(20.dp))
             .clickable(onClick = onPlay)
     ) {
-        Thumbnail(video, Modifier.fillMaxSize())
+        AsyncImage(
+            model = video.thumbnail?.replace(Regex("hq720|hqdefault|mqdefault"), "maxresdefault"),
+            contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().background(Color.Black),
+            error = coil.compose.rememberAsyncImagePainter(video.thumbnail),
+        )
         Box(
             Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color(0x33000000), 0.6f to Color(0xCC000000), 1f to Color(0xF2000000))
+                Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color(0x2208090B), 0.62f to Color(0xC708090B), 1f to Color(0xF708090B))
             )
         )
         Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+            if (video.isLive) {
+                Row(
+                    Modifier.clip(RoundedCornerShape(6.dp)).background(VColors.Red).padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White))
+                    Spacer(Modifier.width(5.dp))
+                    Text("EN VIVO", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                }
+            } else {
+                Text("DESTACADO", color = VColors.Silver, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
+            }
+            Spacer(Modifier.height(6.dp))
             Text(
                 video.title,
                 color = Color.White,
-                fontSize = 19.sp,
+                fontSize = 21.sp,
                 fontWeight = FontWeight.ExtraBold,
-                lineHeight = 23.sp,
+                lineHeight = 25.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            Spacer(Modifier.height(4.dp))
             Text(
-                joinDot(video.channelName, viewsText(video.views)),
-                color = Color(0xFFDADADF),
+                joinDot(video.channelName, viewsText(video.views), video.uploaded, if (video.isLive) null else durationText(video.durationSec).ifEmpty { null }),
+                color = VColors.Silver,
                 fontSize = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -231,64 +257,126 @@ fun HeroCard(video: VideoItem, onPlay: () -> Unit, onChannel: (String) -> Unit) 
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(Color.White)
+                        .background(VColors.RedGradient)
                         .clickable(onClick = onPlay)
-                        .padding(horizontal = 18.dp, vertical = 9.dp),
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.PlayArrow, null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Reproducir", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Reproducir", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0x55FFFFFF))
+                        .background(Color(0x33FFFFFF))
                         .border(1.dp, Color(0x55FFFFFF), RoundedCornerShape(50))
                         .clickable { Library.toggleWatchLater(video) }
-                        .padding(horizontal = 16.dp, vertical = 9.dp),
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        if (saved) Icons.Filled.BookmarkAdded else Icons.Outlined.BookmarkAdd,
+                        if (saved) Icons.Filled.Check else Icons.Filled.Add,
                         null, tint = Color.White, modifier = Modifier.size(19.dp),
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text(if (saved) "Guardado" else "Guardar", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(if (saved) "En Mi lista" else "Mi lista", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }
     }
 }
 
-/** Fila horizontal de tarjetas (Tendencias, Historial…). */
+/**
+ * Fila horizontal de tarjetas (Tendencias, Historial…).
+ * Con [resume] muestra el % visto y el tiempo que falta (Continuar viendo).
+ */
 @Composable
-fun VideoShelf(videos: List<VideoItem>, onVideo: (VideoItem) -> Unit) {
+fun VideoShelf(
+    videos: List<VideoItem>,
+    onVideo: (VideoItem) -> Unit,
+    onChannel: ((String) -> Unit)? = null,
+    resume: Boolean = false,
+) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(videos, key = { it.url }) { v ->
-            Column(Modifier.width(210.dp).clip(RoundedCornerShape(12.dp)).clickable { onVideo(v) }) {
-                Thumbnail(v, Modifier.fillMaxWidth().aspectRatio(16f / 9f), rounded = 12.dp, smallBadge = true)
-                Text(
-                    v.title,
-                    color = VColors.Text,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = 17.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp),
-                )
-                Text(
-                    joinDot(v.channelName, viewsText(v.views)),
-                    color = VColors.Secondary,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                )
+            Column(Modifier.width(if (resume) 240.dp else 220.dp).clip(RoundedCornerShape(14.dp)).clickable { onVideo(v) }) {
+                Box {
+                    Thumbnail(v, Modifier.fillMaxWidth().aspectRatio(16f / 9f), rounded = 14.dp, smallBadge = true)
+                    if (resume) {
+                        Box(
+                            Modifier.align(Alignment.Center).size(42.dp).clip(CircleShape).background(VColors.RedGradient),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Filled.PlayArrow, "Reanudar", tint = Color.White, modifier = Modifier.size(26.dp)) }
+                    }
+                }
+                Row(Modifier.padding(top = 6.dp)) {
+                    Column(Modifier.weight(1f).padding(horizontal = 2.dp)) {
+                        Text(
+                            v.title,
+                            color = VColors.Text,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 17.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        val p = if (resume) progressOf(v) else null
+                        if (p != null) {
+                            val left = ((1f - p) * v.durationSec).toLong()
+                            val leftTxt = if (left >= 3600) "Quedan ${left / 3600} h ${(left % 3600) / 60} min" else "Quedan ${maxOf(1, left / 60)} min"
+                            Row {
+                                Text("${(p * 100).toInt()}%", color = VColors.Red, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(" · $leftTxt", color = VColors.Secondary, fontSize = 11.sp, maxLines = 1)
+                            }
+                        } else {
+                            Text(
+                                joinDot(v.channelName, viewsText(v.views)),
+                                color = VColors.Secondary,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    if (!resume) Box(Modifier.size(width = 30.dp, height = 36.dp), contentAlignment = Alignment.TopCenter) { VideoMenu(v, onChannel) }
+                }
+            }
+        }
+    }
+}
+
+/** Categorías visuales del Inicio (sección Descubre). */
+data class DiscoverTile(val id: String, val label: String, val icon: ImageVector, val color: Long)
+
+@Composable
+fun DiscoverGrid(tiles: List<DiscoverTile>, onPick: (DiscoverTile) -> Unit) {
+    Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        tiles.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { t ->
+                    val c = Color(t.color)
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(92.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Brush.linearGradient(listOf(c, Color(0xFF101114))))
+                            .border(1.dp, Color(0x10FFFFFF), RoundedCornerShape(14.dp))
+                            .clickable { onPick(t) }
+                            .padding(10.dp),
+                    ) {
+                        Icon(t.icon, null, tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.align(Alignment.TopEnd).size(40.dp))
+                        Column(Modifier.align(Alignment.BottomStart)) {
+                            Text(t.label, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                            Text("Explorar ›", color = Color(0xBFFFFFFF), fontSize = 11.sp)
+                        }
+                    }
+                }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

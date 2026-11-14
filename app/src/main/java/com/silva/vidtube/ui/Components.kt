@@ -22,6 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.VideoLibrary
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -135,24 +138,42 @@ fun Thumbnail(video: VideoItem, modifier: Modifier = Modifier, rounded: Dp = 0.d
             modifier = Modifier.fillMaxSize(),
         )
         val badge = if (video.isLive) "EN VIVO" else durationText(video.durationSec)
+        val progress = progressOf(video)
         if (badge.isNotEmpty()) {
-            Text(
-                badge,
-                color = Color.White,
-                fontSize = if (smallBadge) 11.sp else 12.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
+            Row(
+                Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(6.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (video.isLive) VColors.Red else Color(0xCC000000))
-                    .padding(horizontal = 4.dp, vertical = 1.dp),
-            )
+                    .padding(end = 6.dp, bottom = if (progress != null) 9.dp else 6.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(if (video.isLive) VColors.Red else Color(0xD108090B))
+                    .padding(horizontal = 5.dp, vertical = 1.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (video.isLive) {
+                    Box(Modifier.size(5.dp).clip(CircleShape).background(Color.White))
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(badge, color = Color.White, fontSize = if (smallBadge) 11.sp else 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        // Barra roja con lo que ya viste del video
+        if (progress != null) {
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(Color(0x55FFFFFF))) {
+                Box(Modifier.fillMaxWidth(progress).height(3.dp).background(VColors.Red))
+            }
         }
     }
 }
 
-/** Tarjeta grande como en el inicio de YouTube. */
+/** Parte del video que ya se vio (0..1), o null si no hay posición guardada. */
+fun progressOf(video: VideoItem): Float? {
+    if (video.isLive || video.durationSec <= 0) return null
+    val pos = Library.position(video.url)
+    if (pos <= 0) return null
+    return (pos / 1000f / video.durationSec).coerceIn(0.02f, 1f)
+}
+
+/** Tarjeta grande de video. */
 @Composable
 fun VideoCard(
     video: VideoItem,
@@ -260,15 +281,23 @@ fun VideoMenu(video: VideoItem, onChannel: ((String) -> Unit)?, onRemove: (() ->
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
-                text = { Text(if (saved) "Quitar de Ver más tarde" else "Guardar en Ver más tarde") },
+                text = { Text(if (saved) "Quitar de Mi lista" else "Guardar en Mi lista") },
                 onClick = {
                     open = false
                     val added = Library.toggleWatchLater(video)
                     Toast.makeText(
                         context,
-                        if (added) "Guardado en Ver más tarde" else "Quitado de Ver más tarde",
+                        if (added) "Guardado en Mi lista (Ver más tarde)" else "Quitado de Mi lista",
                         Toast.LENGTH_SHORT
                     ).show()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(if (Library.isLiked(video.url)) "Quitar de Me gusta" else "Agregar a Me gusta") },
+                onClick = {
+                    open = false
+                    val added = Library.toggleLike(video)
+                    Toast.makeText(context, if (added) "Agregado a Videos que me gustan" else "Quitado de Videos que me gustan", Toast.LENGTH_SHORT).show()
                 },
             )
             DropdownMenuItem(
@@ -358,13 +387,16 @@ fun ErrorView(message: String, onRetry: (() -> Unit)?, modifier: Modifier = Modi
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
+        StateIcon(Icons.Outlined.Info)
+        Text("Algo salió mal", color = VColors.Text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
         Text(message, color = VColors.Secondary, textAlign = TextAlign.Center, fontSize = 14.sp)
         if (onRetry != null) {
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = onRetry,
-                colors = ButtonDefaults.buttonColors(containerColor = VColors.Chip, contentColor = VColors.Text),
-            ) { Text("Reintentar") }
+                colors = ButtonDefaults.buttonColors(containerColor = VColors.Red, contentColor = Color.White),
+            ) { Text("Reintentar", fontWeight = FontWeight.Bold) }
         }
     }
 }
@@ -375,6 +407,7 @@ fun EmptyView(title: String, subtitle: String, modifier: Modifier = Modifier) {
         modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        StateIcon(Icons.Outlined.VideoLibrary)
         Text(title, color = VColors.Text, fontSize = 18.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
         Text(subtitle, color = VColors.Secondary, fontSize = 14.sp, textAlign = TextAlign.Center)
@@ -397,5 +430,43 @@ fun ActionChip(text: String, icon: androidx.compose.ui.graphics.vector.ImageVect
             Spacer(Modifier.width(6.dp))
         }
         Text(text, color = VColors.Text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+/** Ícono redondo de los estados vacíos y de error. */
+@Composable
+fun StateIcon(icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Box(
+        Modifier.padding(bottom = 14.dp).size(68.dp).clip(CircleShape).background(VColors.Red.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, null, tint = VColors.Red, modifier = Modifier.size(32.dp)) }
+}
+
+/** Bloques grises animados mientras carga la lista (en lugar del círculo girando). */
+@Composable
+fun SkeletonFeed(cards: Int = 3) {
+    val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "sk")
+    val a by t.animateFloat(
+        0.45f, 0.9f,
+        androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(800),
+            androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "a",
+    )
+    val c = VColors.Chip.copy(alpha = a)
+    Column(Modifier.fillMaxWidth()) {
+        repeat(cards) {
+            Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)).background(c))
+            Row(Modifier.padding(start = 14.dp, top = 10.dp, end = 14.dp, bottom = 22.dp)) {
+                Box(Modifier.size(36.dp).clip(CircleShape).background(c))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Box(Modifier.fillMaxWidth(0.9f).height(14.dp).clip(RoundedCornerShape(6.dp)).background(c))
+                    Spacer(Modifier.height(8.dp))
+                    Box(Modifier.fillMaxWidth(0.55f).height(12.dp).clip(RoundedCornerShape(6.dp)).background(c))
+                }
+            }
+        }
     }
 }
