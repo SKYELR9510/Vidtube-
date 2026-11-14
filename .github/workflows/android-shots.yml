@@ -1,0 +1,48 @@
+name: Vidtube Android (capturas en emulador)
+
+# Después de cada APK publicado: lo instala en un emulador y toma capturas reales
+on:
+  workflow_run:
+    workflows: ["Compilar y publicar Vidtube"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  shots:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Descargar el último APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(gh release list --limit 30 --json tagName -q '[.[] | select(.tagName | startswith("build-"))][0].tagName')
+          gh release download "$TAG" --pattern '*.apk' --output app.apk
+          echo "TAG=$TAG" >> $GITHUB_ENV
+      - name: Emulador y capturas
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash .github/scripts/android-shots.sh
+      - name: Subir capturas (release de pruebas, no es una versión)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la shots
+          find shots -size 0 -delete
+          gh release view android-capturas >/dev/null 2>&1 || gh release create android-capturas --prerelease --title "Capturas Android (pruebas)" --notes "Capturas automáticas del emulador. No es una versión para instalar."
+          gh release upload android-capturas shots/* --clobber

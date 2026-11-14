@@ -32,6 +32,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.filled.Check
 import coil.compose.AsyncImage
 import androidx.compose.material.icons.filled.Bookmark
@@ -121,6 +123,7 @@ data class NavTab(val route: String, val label: String, val selected: ImageVecto
 val navTabs = listOf(
     NavTab("home", "Inicio", Icons.Filled.Home, Icons.Outlined.Home),
     NavTab("shorts", "Shorts", Icons.Filled.Bolt, Icons.Outlined.Bolt),
+    NavTab("search", "Explorar", Icons.Filled.Explore, Icons.Outlined.Explore),
     NavTab("subs", "Suscripciones", Icons.Filled.Subscriptions, Icons.Outlined.Subscriptions),
     NavTab("library", "Biblioteca", Icons.Filled.Bookmark, Icons.Outlined.BookmarkBorder),
 )
@@ -163,7 +166,7 @@ fun VBottomBar(current: String?, onSelect: (String) -> Unit) {
                     Text(
                         tab.label,
                         color = if (sel) VColors.Text else VColors.Secondary,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
                     )

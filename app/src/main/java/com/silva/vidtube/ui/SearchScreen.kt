@@ -46,6 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Tv
+import androidx.compose.material.icons.outlined.Whatshot
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
@@ -238,14 +241,17 @@ data class SearchCategory(
 
 private val searchCategories = listOf(
     SearchCategory("Películas", "películas completas en español", Icons.Outlined.Movie, 0xFF7A1F2B, 0xFF2A0A10),
-    SearchCategory("Videojuegos", "videojuegos gameplay", Icons.Outlined.SportsEsports, 0xFF2346B8, 0xFF0B1640),
+    SearchCategory("Series", "series tráiler oficial", Icons.Outlined.Tv, 0xFF3B2A8A, 0xFF120B33),
     SearchCategory("Música", "música 2026", Icons.Outlined.MusicNote, 0xFF8E2DC6, 0xFF2B0B42),
+    SearchCategory("Conciertos", "concierto en vivo completo", Icons.Outlined.Mic, 0xFF8A1F6E, 0xFF2B0A22),
+    SearchCategory("Videojuegos", "videojuegos gameplay", Icons.Outlined.SportsEsports, 0xFF2346B8, 0xFF0B1640),
     SearchCategory("Deportes", "deportes resumen", Icons.Outlined.SportsSoccer, 0xFF1F8A4C, 0xFF0A2E19),
     SearchCategory("Noticias", "noticias hoy", Icons.Outlined.Newspaper, 0xFFB5462A, 0xFF3A130A),
     SearchCategory("Infantil", "canciones infantiles", Icons.Outlined.ChildCare, 0xFFE0912B, 0xFF4A2A06),
     SearchCategory("Ciencia y tecnología", "ciencia y tecnología", Icons.Outlined.Science, 0xFF1B8FA6, 0xFF06303A),
     SearchCategory("Viajes y estilo de vida", "viajes vlog", Icons.Outlined.Flight, 0xFF2B6FD6, 0xFF0A2450),
     SearchCategory("Comida y recetas", "recetas fáciles", Icons.Outlined.Restaurant, 0xFFC7502A, 0xFF43160A),
+    SearchCategory("Tendencias", "tendencias perú", Icons.Outlined.Whatshot, 0xFFB0101F, 0xFF3A050B),
 )
 
 @Composable

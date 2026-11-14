@@ -64,8 +64,11 @@ function move(dir) {
   const a = focused.getBoundingClientRect();
   const ax = a.left + a.width / 2, ay = a.top + a.height / 2;
   let best = null, bestScore = Infinity;
+  const inRail = !!focused.closest('.rail');
   for (const e of list) {
     if (e === focused) continue;
+    // Arriba/abajo no salta entre el menú lateral y el contenido (solo izquierda/derecha)
+    if ((dir === 'up' || dir === 'down') && !!e.closest('.rail') !== inRail) continue;
     const b = e.getBoundingClientRect();
     const bx = b.left + b.width / 2, by = b.top + b.height / 2;
     let main, cross;
@@ -84,7 +87,7 @@ app.innerHTML = `
   <nav class="rail">
     <img class="rail-mark" src="assets/mark.png" alt="">
     <button class="f nav" data-go="home">${icon('home', 34)}<span>Inicio</span></button>
-    <button class="f nav" data-go="search">${icon('search', 34)}<span>Buscar</span></button>
+    <button class="f nav" data-go="search">${icon('compass', 34)}<span>Explorar</span></button>
     <button class="f nav" data-go="subs">${icon('subs', 34)}<span>Suscripciones</span></button>
     <button class="f nav" data-go="library">${icon('bookmark', 34)}<span>Biblioteca</span></button>
     <button class="f nav" data-go="settings">${icon('settings', 34)}<span>Configuración</span></button>
@@ -286,11 +289,12 @@ const routes = {
       body.appendChild(r);
     }
     const cats = [
-      ['Películas', 'películas completas en español', 'movie', '#7A1F2B', '#2A0A10'], ['Videojuegos', 'videojuegos gameplay', 'game', '#2346B8', '#0B1640'],
+      ['Películas', 'películas completas en español', 'movie', '#7A1F2B', '#2A0A10'], ['Series', 'series tráiler oficial', 'tv', '#3b2a8a', '#120b33'],
+      ['Conciertos', 'concierto en vivo completo', 'mic', '#8a1f6e', '#2b0a22'], ['Videojuegos', 'videojuegos gameplay', 'game', '#2346B8', '#0B1640'],
       ['Música', 'música 2026', 'music', '#8E2DC6', '#2B0B42'], ['Deportes', 'deportes resumen', 'sports', '#1F8A4C', '#0A2E19'],
       ['Noticias', 'noticias hoy', 'news', '#B5462A', '#3A130A'], ['Infantil', 'canciones infantiles', 'kids', '#E0912B', '#4A2A06'],
       ['Ciencia y tecnología', 'ciencia y tecnología', 'science', '#1B8FA6', '#06303A'], ['Viajes', 'viajes vlog', 'travel', '#2B6FD6', '#0A2450'],
-      ['Comida y recetas', 'recetas fáciles', 'food', '#C7502A', '#43160A'],
+      ['Comida y recetas', 'recetas fáciles', 'food', '#C7502A', '#43160A'], ['Tendencias', 'tendencias perú', 'live', '#b0101f', '#3a050b'],
     ];
     const g = el('<section class="row"><h2>Explorar categorías</h2><div class="cats"></div></section>');
     cats.forEach(([l, qq, ic, a, b]) => {
