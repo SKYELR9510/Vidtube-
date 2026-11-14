@@ -55,6 +55,7 @@ export function createPlayer(host, opts = {}) {
             <img src="assets/wordmark.png" class="vp-logo" alt="Vidtube">
           </div>
           <div class="vp-grow"></div>
+          <button class="vp-ic vp-pip" title="Imagen en imagen (P)">${icon('pip', 24)}</button>
           <button class="vp-ic vp-cc" title="Subtítulos (C)">${icon('cc', 26)}</button>
           <div class="vp-menu-wrap">
             <button class="vp-ic vp-gear" title="Calidad">${icon('settings', 26)}</button>
@@ -237,7 +238,7 @@ export function createPlayer(host, opts = {}) {
 
   // ---------- Teclado ----------
   const onKey = (e) => {
-    if (destroyed || !document.body.contains(root)) return;
+    if (destroyed || !document.body.contains(root) || root.closest('.mini')) return;
     const tag = (document.activeElement?.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea') return;
     const k = e.key.toLowerCase();
@@ -247,6 +248,7 @@ export function createPlayer(host, opts = {}) {
     else if (k === 'f') toggleFs();
     else if (k === 'm') { video.muted = !video.muted; volIcon(); }
     else if (k === 'c') toggleSubs();
+    else if (k === 'p') togglePip();
     else if (k === 'arrowup' && !opts.vertical) { e.preventDefault(); video.volume = Math.min(1, video.volume + 0.05); $('.vp-volume').value = video.volume; }
     else if (k === 'arrowdown' && !opts.vertical) { e.preventDefault(); video.volume = Math.max(0, video.volume - 0.05); $('.vp-volume').value = video.volume; }
   };
@@ -271,6 +273,11 @@ export function createPlayer(host, opts = {}) {
     flash(subsOn ? 'Subtítulos activados' : 'Subtítulos desactivados');
   };
   $('.vp-cc').onclick = toggleSubs;
+  // Imagen en imagen (ventana flotante del sistema)
+  const togglePip = async () => {
+    try { if (document.pictureInPictureElement) await document.exitPictureInPicture(); else await video.requestPictureInPicture(); } catch {}
+  };
+  $('.vp-pip').onclick = togglePip;
 
   // ---------- Calidad ----------
   const menu = $('.vp-menu');

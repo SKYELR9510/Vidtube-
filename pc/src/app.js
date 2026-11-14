@@ -4,7 +4,7 @@ import { icon } from './icons.js';
 import { createPlayer } from './player.js';
 import {
   store, onChange, addHistory, removeHistory, clearHistory, toggleLater, toggleLike, isLater, isLiked,
-  isSub, toggleSub, addSearch, setSettings, interests,
+  isSub, toggleSub, addSearch, setSettings, interests, position,
 } from './store.js';
 
 const VERSION = new URLSearchParams(location.search).get('v') || 'dev';
@@ -25,28 +25,37 @@ onChange(applyTheme);
 
 // ---------- Estructura ----------
 app.innerHTML = `
-  <aside class="side">
+  <aside class="side" aria-label="Navegación principal">
     <div class="side-logo"><img class="logo" alt="Vidtube"><img class="mark" src="assets/mark.png" alt="Vidtube"></div>
     <nav>
-      <button data-go="home">${icon('home')}<span>Inicio</span></button>
-      <button data-go="shorts">${icon('bolt')}<span>Shorts</span></button>
-      <button data-go="explore">${icon('search')}<span>Explorar</span></button>
-      <button data-go="subs">${icon('subs')}<span>Suscripciones</span></button>
-      <button data-go="library">${icon('bookmark')}<span>Biblioteca</span></button>
+      <button data-go="home" title="Inicio">${icon('home')}<span>Inicio</span></button>
+      <button data-go="shorts" title="Shorts">${icon('bolt')}<span>Shorts</span></button>
+      <button data-go="explore" title="Explorar">${icon('compass')}<span>Explorar</span></button>
+      <button data-go="subs" title="Suscripciones">${icon('subs')}<span>Suscripciones</span></button>
+      <button data-go="library" title="Biblioteca">${icon('bookmark')}<span>Biblioteca</span></button>
       <div class="side-sep"></div>
-      <button data-go="settings">${icon('settings')}<span>Configuración</span></button>
+      <button data-go="settings" title="Configuración">${icon('settings')}<span>Configuración</span></button>
     </nav>
     <div class="side-subs"></div>
+    <div class="side-promo"><img src="assets/mark.png" alt=""><b>Tu mundo de videos,</b><span>en un solo lugar</span></div>
   </aside>
   <div class="mainwrap">
     <header class="top">
-      <button class="iconbtn back" title="Atrás">${icon('back')}</button>
-      <form class="searchbar">
-        <input type="search" placeholder="Buscar en Vidtube" autocomplete="off">
-        <button type="submit" title="Buscar">${icon('search')}</button>
+      <button class="iconbtn menu-btn" title="Contraer o expandir el menú" aria-label="Contraer o expandir el menú">${icon('menu')}</button>
+      <button class="iconbtn back" title="Atrás" aria-label="Atrás">${icon('back')}</button>
+      <form class="searchbar" role="search">
+        <span class="s-ic">${icon('search', 20)}</span>
+        <input type="search" placeholder="Buscar videos, canales, música…" autocomplete="off" aria-label="Buscar">
+        <button type="submit" class="s-go" title="Buscar">${icon('search', 20)}<span>Buscar</span></button>
         <div class="suggest"></div>
       </form>
-      <div class="top-right"><span class="update-pill"></span></div>
+      <div class="top-right">
+        <span class="update-pill"></span>
+        <div class="prof">
+          <button class="avatar-btn" title="Tu perfil" aria-label="Tu perfil" aria-haspopup="menu">${icon('person', 22)}</button>
+          <div class="prof-menu" role="menu"></div>
+        </div>
+      </div>
     </header>
     <main id="view"></main>
   </div>`;
@@ -54,16 +63,50 @@ const view = document.getElementById('view');
 const logoImgs = () => document.querySelectorAll('img.logo').forEach((i) => i.src = store.settings.light ? 'assets/wordmark_light.png' : 'assets/wordmark.png');
 logoImgs(); onChange(logoImgs);
 
+// Barra lateral contraíble (se recuerda en esta PC)
+const SIDE_KEY = 'vt_side_collapsed';
+const setCollapsed = (on) => { app.classList.toggle('collapsed', on); try { localStorage.setItem(SIDE_KEY, on ? '1' : ''); } catch {} };
+setCollapsed((() => { try { return !!localStorage.getItem(SIDE_KEY); } catch { return false; } })());
+app.querySelector('.menu-btn').onclick = () => setCollapsed(!app.classList.contains('collapsed'));
+
+// Menú del perfil (datos reales guardados en esta PC)
+const prof = app.querySelector('.prof');
+const profMenu = prof.querySelector('.prof-menu');
+function paintProf() {
+  const s = store.settings;
+  profMenu.innerHTML = `
+    <div class="pm-head"><span class="avatar-btn sm">${icon('person', 20)}</span><div><b>Vidtube en esta PC</b><span>${store.subs.length} suscripciones · ${store.later.length} en Mi lista</span></div></div>
+    <button role="menuitem" data-go="library">${icon('bookmark', 20)}<span>Biblioteca</span></button>
+    <button role="menuitem" data-list="history">${icon('history', 20)}<span>Historial</span></button>
+    <button role="menuitem" data-list="later">${icon('clock', 20)}<span>Mi lista</span></button>
+    <button role="menuitem" data-go="subs">${icon('subs', 20)}<span>Suscripciones</span></button>
+    <div class="pm-sep"></div>
+    <button role="menuitem" data-theme>${icon('sun', 20)}<span>${s.light ? 'Usar tema oscuro' : 'Usar tema claro'}</span></button>
+    <button role="menuitem" data-go="settings">${icon('settings', 20)}<span>Configuración</span></button>`;
+}
+prof.querySelector('.avatar-btn').onclick = () => { paintProf(); prof.classList.toggle('open'); profMenu.querySelector('button')?.focus(); };
+profMenu.onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  prof.classList.remove('open');
+  if (b.hasAttribute('data-theme')) { setSettings({ light: !store.settings.light }); if (current?.name === 'settings') go('settings', {}, false); return; }
+  if (b.dataset.list) go('list', { kind: b.dataset.list, title: b.dataset.list === 'history' ? 'Historial' : 'Ver más tarde' });
+  else if (b.dataset.go) { stack.length = 0; go(b.dataset.go, {}, false); }
+};
+document.addEventListener('mousedown', (e) => { if (!prof.contains(e.target)) prof.classList.remove('open'); });
+
 // ---------- Navegación ----------
 const stack = [];
 let current = null;
 let cleanup = null;
 async function go(name, params = {}, push = true) {
-  if (cleanup) { try { await cleanup(); } catch {} cleanup = null; }
+  closeMenu();
+  if (cleanup) { const c = cleanup; cleanup = null; try { await c(name, params); } catch {} }
+  // El reproductor flotante se cierra al abrir Shorts u otro video
+  if (mini && (name === 'shorts' || (name === 'watch' && params.v?.id !== mini.video.id))) closeMini();
   if (push && current) stack.push(current);
   current = { name, params };
-  document.querySelectorAll('.side nav button').forEach((b) => b.classList.toggle('on', b.dataset.go === name));
-  app.querySelector('.back').style.visibility = stack.length ? 'visible' : 'hidden';
+  document.querySelectorAll('.side nav button').forEach((b) => { const on = b.dataset.go === name; b.classList.toggle('on', on); on ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'); });
+  app.querySelector('.back').style.display = stack.length ? '' : 'none';
   view.scrollTop = 0;
   view.innerHTML = '';
   view.className = 'view-' + name;
@@ -80,9 +123,15 @@ app.querySelector('.side nav').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-go]');
   if (b) { stack.length = 0; go(b.dataset.go, {}, false); }
 });
-const errorBox = (e) => `<div class="empty"><h3>Algo salió mal</h3><p>${esc(e?.message || e)}</p><button class="btn-red retry">Reintentar</button></div>`;
+const emptyBox = (ic, title, text = '', btn = '') => `<div class="empty"><div class="empty-ic">${icon(ic, 34)}</div><h3>${esc(title)}</h3>${text ? `<p>${esc(text)}</p>` : ''}${btn}</div>`;
+const errorBox = (e) => emptyBox('info', 'Algo salió mal', e?.message || String(e), '<button class="btn-red retry">Reintentar</button>');
 const bindRetry = (fn) => view.querySelector('.retry')?.addEventListener('click', fn);
 const loading = () => `<div class="loader"><div class="spinner"></div></div>`;
+/** Esqueletos de carga (en lugar del círculo girando). */
+const skCards = (n) => Array.from({ length: n }, () => '<div class="sk-card"><div class="sk sk-thumb"></div><div class="sk sk-line"></div><div class="sk sk-line short"></div></div>').join('');
+const skeleton = (kind) => kind === 'home'
+  ? `<div class="sk sk-hero"></div><div class="sk sk-h"></div><div class="sk-row">${skCards(5)}</div><div class="sk sk-h"></div><div class="sk-row">${skCards(5)}</div>`
+  : `<div class="sk-grid">${skCards(8)}</div>`;
 
 // ---------- Búsqueda (barra superior) ----------
 const form = app.querySelector('.searchbar');
@@ -110,30 +159,88 @@ sug.addEventListener('mousedown', (e) => {
 });
 
 // ---------- Tarjetas ----------
+/** Progreso guardado de un video (para "Continuar viendo" y la barra roja de las tarjetas). */
+function progressOf(v) {
+  const pos = position(v.id);
+  const d = v.seconds;
+  if (!pos || !d || v.live) return null;
+  return { pct: Math.min(100, Math.max(2, (pos / d) * 100)), left: Math.max(0, d - pos) };
+}
+const leftText = (sec) => sec >= 3600 ? `Quedan ${Math.floor(sec / 3600)} h ${Math.round((sec % 3600) / 60)} min` : `Quedan ${Math.max(1, Math.round(sec / 60))} min`;
 function card(v, opts = {}) {
+  const pr = v.short ? null : progressOf(v);
   const c = el(`
-    <div class="card ${v.short ? 'card-short' : ''}">
+    <div class="card ${v.short ? 'card-short' : ''} ${opts.resume ? 'card-resume' : ''}" tabindex="0" role="link" aria-label="${esc(v.title)}">
       <div class="thumb">
-        <img loading="lazy" src="${esc(v.thumb)}" alt="">
-        ${v.live ? '<span class="dur live">EN VIVO</span>' : v.duration ? `<span class="dur">${esc(v.duration)}</span>` : ''}
+        <img loading="lazy" decoding="async" src="${esc(v.thumb)}" alt="" onload="this.classList.add('ok')">
+        ${opts.resume ? `<span class="play-ov">${icon('play', 30)}</span>` : ''}
+        ${v.live ? '<span class="dur live"><i></i>EN VIVO</span>' : v.duration ? `<span class="dur">${esc(v.duration)}</span>` : ''}
+        ${pr ? `<div class="prog"><i style="width:${pr.pct.toFixed(1)}%"></i></div>` : ''}
       </div>
       <div class="meta">
-        ${opts.noAvatar || v.short ? '' : `<div class="avatar" data-ch="${esc(v.channelId)}">${v.avatar ? `<img src="${esc(v.avatar)}" alt="">` : esc((v.channel || '?').slice(0, 1))}</div>`}
+        ${opts.noAvatar || v.short || opts.resume ? '' : `<div class="avatar" data-ch="${esc(v.channelId)}">${v.avatar ? `<img src="${esc(v.avatar)}" alt="">` : esc((v.channel || '?').slice(0, 1))}</div>`}
         <div class="txt">
           <div class="title">${esc(v.title)}</div>
-          ${v.short ? `<div class="sub">${esc(v.views)}</div>` : `<div class="sub ch" data-ch="${esc(v.channelId)}">${esc(v.channel)}</div><div class="sub">${dot(v.views, v.published)}</div>`}
+          ${v.short ? `<div class="sub">${esc(v.views)}</div>`
+            : opts.resume && pr ? `<div class="sub ch" data-ch="${esc(v.channelId)}">${esc(v.channel)}</div><div class="sub resume-sub"><b>${Math.round(pr.pct)}%</b> · ${leftText(pr.left)}</div>`
+            : `<div class="sub ch" data-ch="${esc(v.channelId)}">${esc(v.channel)}</div><div class="sub">${dot(v.views, v.published)}</div>`}
         </div>
-        ${opts.onRemove ? `<button class="iconbtn rm" title="Quitar">${icon('close', 18)}</button>` : ''}
+        ${v.short ? '' : `<button class="iconbtn kebab" title="Más acciones" aria-label="Más acciones" aria-haspopup="menu">${icon('dots', 20)}</button>`}
       </div>
     </div>`);
   c.addEventListener('click', (e) => {
+    const k = e.target.closest('.kebab');
+    if (k) { e.stopPropagation(); openMenu(k, v, opts, c); return; }
     const ch = e.target.closest('[data-ch]');
     if (ch && ch.dataset.ch) { e.stopPropagation(); go('channel', { id: ch.dataset.ch }); return; }
-    if (e.target.closest('.rm')) { e.stopPropagation(); opts.onRemove(); c.remove(); return; }
     if (v.short) go('shorts', { start: v, list: opts.list }); else go('watch', { v });
   });
+  c.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === c) c.click(); });
   return c;
 }
+
+// Menú contextual de las tarjetas (⋮)
+let menuEl = null;
+function closeMenu() { menuEl?.remove(); menuEl = null; }
+function openMenu(anchor, v, opts, cardEl) {
+  if (menuEl && menuEl.dataset.id === v.id) { closeMenu(); return; }
+  closeMenu();
+  const items = [
+    ['later', isLater(v.id) ? 'Quitar de Mi lista' : 'Guardar en Mi lista', isLater(v.id) ? 'playlistCheck' : 'playlistAdd'],
+    ['like', isLiked(v.id) ? 'Quitar de Videos que me gustan' : 'Agregar a Videos que me gustan', 'thumbUp'],
+    v.channelId && ['channel', 'Ir al canal', 'subs'],
+    ['copy', 'Copiar enlace', 'share'],
+    opts.onRemove && ['remove', 'Quitar de esta lista', 'trash'],
+  ].filter(Boolean);
+  const m = el(`<div class="ctx" role="menu">${items.map(([k, l, ic]) => `<button role="menuitem" data-k="${k}">${icon(ic, 20)}<span>${esc(l)}</span></button>`).join('')}</div>`);
+  m.dataset.id = v.id;
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect();
+  m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + 'px';
+  m.style.top = (r.bottom + m.offsetHeight + 8 > innerHeight ? Math.max(8, r.top - m.offsetHeight - 4) : r.bottom + 4) + 'px';
+  m.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    closeMenu();
+    const k = b.dataset.k;
+    if (k === 'later') toast(toggleLater(v) ? 'Guardado en Mi lista' : 'Quitado de Mi lista');
+    else if (k === 'like') toast(toggleLike(v) ? 'Agregado a Videos que me gustan' : 'Quitado de Videos que me gustan');
+    else if (k === 'channel') go('channel', { id: v.channelId });
+    else if (k === 'copy') { navigator.clipboard.writeText('https://youtu.be/' + v.id); toast('Enlace copiado'); }
+    else if (k === 'remove') { opts.onRemove(); cardEl.remove(); }
+  });
+  m.addEventListener('keydown', (e) => {
+    const bs = [...m.querySelectorAll('button')]; const i = bs.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); bs[(i + 1) % bs.length].focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); bs[(i - 1 + bs.length) % bs.length].focus(); }
+  });
+  menuEl = m;
+  m._top = view.scrollTop;
+  m.querySelector('button').focus({ preventScroll: true });
+}
+document.addEventListener('mousedown', (e) => { if (menuEl && !menuEl.contains(e.target) && !e.target.closest('.kebab')) closeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); prof.classList.remove('open'); } });
+view.addEventListener('scroll', () => { if (menuEl && Math.abs(view.scrollTop - menuEl._top) > 40) closeMenu(); }, { passive: true });
+
 function grid(videos, opts) {
   const g = el(`<div class="grid ${opts?.short ? 'grid-short' : ''}"></div>`);
   videos.forEach((v) => g.appendChild(card(v, { ...opts, list: videos })));
@@ -151,7 +258,7 @@ function infinite(container, page, opts) {
   const io = new IntersectionObserver(async (ents) => {
     if (!ents[0].isIntersecting || busy || !more) return;
     busy = true;
-    sentinel.innerHTML = loading();
+    sentinel.innerHTML = `<div class="sk-grid">${skCards(4)}</div>`;
     try {
       const p = await more();
       p.videos.filter((v) => !seen.has(v.id)).forEach((v) => { seen.add(v.id); g.appendChild(card(v, opts)); });
@@ -164,41 +271,50 @@ function infinite(container, page, opts) {
   return () => io.disconnect();
 }
 function chips(list, selected, onPick) {
-  const row = el('<div class="chips"></div>');
-  list.forEach(([id, label]) => {
-    const b = el(`<button class="chip ${id === selected ? 'on' : ''}">${esc(label)}</button>`);
+  const row = el('<div class="chips" role="tablist"></div>');
+  list.forEach(([id, label, ic]) => {
+    const b = el(`<button class="chip ${id === selected ? 'on' : ''}" role="tab" aria-selected="${id === selected}">${ic ? icon(ic, 18) : ''}<span>${esc(label)}</span></button>`);
     b.onclick = () => onPick(id);
     row.appendChild(b);
   });
   return row;
 }
-const section = (title, onMore) => {
-  const s = el(`<div class="section"><h2>${esc(title)}</h2>${onMore ? `<button class="more">Ver más ${icon('chevron', 18)}</button>` : ''}</div>`);
+const section = (title, onMore, sub) => {
+  const s = el(`<div class="section"><div class="sec-t"><h2>${esc(title)}</h2>${sub ? `<span>${esc(sub)}</span>` : ''}</div>${onMore ? `<button class="more">Ver todo ${icon('chevron', 18)}</button>` : ''}</div>`);
   if (onMore) s.querySelector('.more').onclick = onMore;
   return s;
 };
-function shelf(videos) {
-  const row = el('<div class="shelf"></div>');
-  videos.forEach((v) => row.appendChild(card(v)));
-  return row;
+/** Fila horizontal con flechas para desplazarse. */
+function shelf(videos, opts = {}) {
+  const wrap = el(`<div class="shelf-wrap at-start"><button class="sh-nav prev" aria-label="Anterior">${icon('first', 28)}</button><div class="shelf ${opts.cls || ''}"></div><button class="sh-nav next" aria-label="Siguiente">${icon('chevron', 28)}</button></div>`);
+  const row = wrap.querySelector('.shelf');
+  videos.forEach((v) => row.appendChild(card(v, { ...opts, list: videos })));
+  const upd = () => { wrap.classList.toggle('at-start', row.scrollLeft < 8); wrap.classList.toggle('at-end', row.scrollLeft + row.clientWidth >= row.scrollWidth - 8); };
+  row.addEventListener('scroll', upd, { passive: true });
+  requestAnimationFrame(upd);
+  wrap.querySelector('.prev').onclick = () => row.scrollBy({ left: -row.clientWidth * 0.85, behavior: 'smooth' });
+  wrap.querySelector('.next').onclick = () => row.scrollBy({ left: row.clientWidth * 0.85, behavior: 'smooth' });
+  return wrap;
 }
-/** Destacados que van pasando solos cada 3 segundos (se detiene al pasar el mouse). */
+/** Banner cinematográfico: destacados que pasan solos cada 3 segundos (se detiene al pasar el mouse). */
 function hero(list) {
   const items = list.slice(0, 5);
-  const h = el(`<div class="hero">${items.map((v, i) => `
+  const h = el(`<div class="hero" aria-roledescription="carrusel">${items.map((v, i) => `
       <div class="hero-slide ${i === 0 ? 'on' : ''}">
-        <img src="${esc(v.thumb.replace(/hq720|hqdefault|mqdefault/, 'maxresdefault'))}" onerror="this.src='${esc(v.thumb)}'" alt="">
+        <img src="${esc(v.thumb.replace(/hq720|hqdefault|mqdefault/, 'maxresdefault'))}" onerror="this.onerror=null;this.src='${esc(v.thumb)}'" alt="">
         <div class="hero-shade"></div>
         <div class="hero-info">
+          ${v.live ? '<span class="live-badge"><i></i>EN VIVO</span>' : '<span class="hero-kicker">Destacado</span>'}
           <h1>${esc(v.title)}</h1>
-          <p>${dot(v.channel, v.views, v.published)}</p>
+          <div class="hero-ch">${v.avatar ? `<img src="${esc(v.avatar)}" alt="">` : ''}<b>${esc(v.channel)}</b></div>
+          <p>${dot(v.views, v.published, v.live ? '' : v.duration)}</p>
           <div class="hero-btns">
-            <button class="btn-white play">${icon('play', 22)} Reproducir</button>
-            <button class="btn-glass save">${icon(isLater(v.id) ? 'playlistCheck' : 'playlistAdd', 22)} <span>${isLater(v.id) ? 'Guardado' : 'Guardar'}</span></button>
+            <button class="btn-red big play">${icon('play', 24)} Reproducir</button>
+            <button class="btn-glass save">${icon(isLater(v.id) ? 'check' : 'plus', 22)} <span>${isLater(v.id) ? 'En Mi lista' : 'Mi lista'}</span></button>
           </div>
         </div>
       </div>`).join('')}
-      <div class="hero-dots">${items.map((_, i) => `<button class="${i === 0 ? 'on' : ''}" data-i="${i}"></button>`).join('')}</div>
+      <div class="hero-dots">${items.map((_, i) => `<button class="${i === 0 ? 'on' : ''}" data-i="${i}" aria-label="Destacado ${i + 1}"></button>`).join('')}</div>
     </div>`);
   const slides = [...h.querySelectorAll('.hero-slide')];
   const dots = [...h.querySelectorAll('.hero-dots button')];
@@ -208,8 +324,8 @@ function hero(list) {
     sl.querySelector('img').onclick = () => go('watch', { v });
     sl.querySelector('.save').onclick = (e) => {
       const on = toggleLater(v);
-      e.currentTarget.innerHTML = `${icon(on ? 'playlistCheck' : 'playlistAdd', 22)} <span>${on ? 'Guardado' : 'Guardar'}</span>`;
-      toast(on ? 'Guardado en Ver más tarde' : 'Quitado de Ver más tarde');
+      e.currentTarget.innerHTML = `${icon(on ? 'check' : 'plus', 22)} <span>${on ? 'En Mi lista' : 'Mi lista'}</span>`;
+      toast(on ? 'Guardado en Mi lista' : 'Quitado de Mi lista');
     };
   });
   let cur = 0;
@@ -222,6 +338,8 @@ function hero(list) {
   dots.forEach((d) => (d.onclick = () => show(+d.dataset.i)));
   h.addEventListener('mouseenter', () => (paused = true));
   h.addEventListener('mouseleave', () => (paused = false));
+  h.addEventListener('focusin', () => (paused = true));
+  h.addEventListener('focusout', () => (paused = false));
   const timer = setInterval(() => {
     if (!document.body.contains(h)) { clearInterval(timer); return; }
     if (!paused && items.length > 1) show(cur + 1);
@@ -230,11 +348,39 @@ function hero(list) {
 }
 
 // ---------- Contenido del Inicio ----------
+// Cada categoría usa la búsqueda real de YouTube
 const CATS = [
-  ['todo', 'Todo'], ['música 2026', 'Música'], ['mix', 'Mixes'], ['en vivo ahora', 'En vivo'],
-  ['videojuegos', 'Videojuegos'], ['películas tráiler', 'Películas'], ['podcast', 'Podcasts'],
-  ['noticias hoy', 'Noticias'], ['deportes resumen', 'Deportes'], ['canciones infantiles', 'Infantil'],
+  ['todo', 'Todo', 'apps'], ['películas tráiler 2026', 'Películas', 'movie'], ['series tráiler oficial', 'Series', 'tv'],
+  ['música 2026', 'Música', 'music'], ['concierto en vivo completo', 'Conciertos', 'mic'], ['deportes resumen', 'Deportes', 'sports'],
+  ['noticias hoy', 'Noticias', 'news'], ['videojuegos', 'Videojuegos', 'game'], ['canciones infantiles', 'Infantil', 'kids'],
+  ['tecnología novedades', 'Tecnología', 'tech'],
 ];
+const DISCOVER = [
+  ['películas tráiler 2026', 'Películas', 'movie', '#7a1020'], ['series tráiler oficial', 'Series', 'tv', '#3b2a8a'],
+  ['música 2026', 'Música', 'music', '#8a1f6e'], ['deportes resumen', 'Deportes', 'sports', '#16704a'],
+  ['canciones infantiles', 'Infantil', 'kids', '#a8611a'], ['tecnología novedades', 'Tecnología', 'tech', '#1a5f8a'],
+];
+const catLabel = (cat) => CATS.find((c) => c[0] === cat)?.[1] || cat;
+function catChips(cat) {
+  const extra = interests(3).filter((q) => !CATS.some((c) => c[0] === q)).map((q) => [q, q, 'history']);
+  const row = chips([...CATS, ...extra], cat, (c) => go('home', { cat: c }, false));
+  row.classList.add('cat-chips');
+  const more = el(`<button class="chip chip-more">${icon('compass', 18)}<span>Más categorías</span></button>`);
+  more.onclick = () => go('explore');
+  row.appendChild(more);
+  return row;
+}
+function discover() {
+  const box = el(`<div><div class="section"><div class="sec-t"><h2>Descubre</h2><span>Explora por categoría</span></div><button class="more">Ver todo ${icon('chevron', 18)}</button></div><div class="discover"></div></div>`);
+  box.querySelector('.more').onclick = () => go('explore');
+  const g = box.querySelector('.discover');
+  DISCOVER.forEach(([q, label, ic, c]) => {
+    const t = el(`<button class="disc" style="--c:${c}"><span class="disc-ic">${icon(ic, 64)}</span><b>${esc(label)}</b><small>Explorar ${icon('chevron', 16)}</small></button>`);
+    t.onclick = () => go('home', { cat: q }, false);
+    g.appendChild(t);
+  });
+  return box;
+}
 const interleave = (lists) => {
   const out = []; const seen = new Set();
   const q = lists.map((l) => [...l]);
@@ -261,33 +407,51 @@ async function loadHome(cat) {
     ...subs.map((c) => YT.channelLatest(c.id, 4)),
   ];
   const lists = await Promise.all(jobs);
+  const recent = interleave(lists.slice(lists.length - subs.length)).filter((v) => !v.short);
   const mixed = interleave(lists).filter((v) => !watched.has(v.id));
   if (!mixed.length) throw new Error('No se pudo cargar el Inicio.' + (errs.length ? ' Motivo: ' + errs[0] : ' Revisa tu conexión.'));
-  return { videos: mixed, more: () => YT.search(base[0]).then((p) => ({ videos: p.videos, more: p.more })) };
+  return { videos: mixed, recent, more: () => YT.search(base[0]).then((p) => ({ videos: p.videos, more: p.more })) };
 }
 
 const routes = {
   async home(v, { cat = 'todo' }) {
-    v.appendChild(chips([...CATS.slice(0, 1), ...interests(4).map((q) => [q, q]), ...CATS.slice(1)], cat, (c) => go('home', { cat: c }, false)));
-    const body = el(`<div>${loading()}</div>`);
+    v.appendChild(catChips(cat));
+    const body = el(`<div class="home">${skeleton('home')}</div>`);
     v.appendChild(body);
     const p = await loadHome(cat);
     body.innerHTML = '';
     const vids = p.videos;
-    if (vids.length >= 12) {
-      body.appendChild(hero(vids.slice(0, 5)));
-      const title = cat === 'todo' ? 'Tendencias para ti' : 'Lo más visto · ' + (CATS.find((c) => c[0] === cat)?.[1] || cat);
+    if (vids.length < 12) return infinite(body, p);
+    body.appendChild(hero(vids.slice(0, 5)));
+    if (cat !== 'todo') {
+      const title = 'Lo más visto · ' + catLabel(cat);
       body.appendChild(section(title, () => go('more', { cat, title })));
       body.appendChild(shelf(vids.slice(5, 13)));
-      body.appendChild(section('Más videos'));
+      body.appendChild(section('Más de ' + catLabel(cat)));
       return infinite(body, { videos: vids.slice(13), more: p.more });
     }
-    return infinite(body, p);
+    // Continuar viendo: videos con posición guardada
+    const cont = store.history.filter((x) => !x.short && progressOf(x)).slice(0, 12);
+    if (cont.length) {
+      body.appendChild(section('Continuar viendo', () => go('list', { kind: 'history', title: 'Historial' })));
+      body.appendChild(shelf(cont, { resume: true, cls: 'shelf-cont' }));
+    }
+    body.appendChild(section('Tendencias para ti', () => go('more', { cat, title: 'Tendencias para ti' }), 'Según lo que ves y buscas'));
+    body.appendChild(shelf(vids.slice(5, 17)));
+    body.appendChild(discover());
+    const recent = (p.recent || []).slice(0, 12);
+    if (recent.length) {
+      body.appendChild(section('Novedades de tus suscripciones', () => go('subs')));
+      body.appendChild(shelf(recent));
+    }
+    const shown = new Set(recent.map((x) => x.id));
+    body.appendChild(section('Recomendado para ti'));
+    return infinite(body, { videos: vids.slice(17).filter((x) => !shown.has(x.id)), more: p.more });
   },
 
   async more(v, { cat, title }) {
     v.appendChild(el(`<h1 class="page-title">${esc(title)}</h1>`));
-    const body = el(`<div>${loading()}</div>`);
+    const body = el(`<div>${skeleton('grid')}</div>`);
     v.appendChild(body);
     const queries = cat === 'todo' ? ['música 2026', 'videojuegos', 'películas tráiler', 'podcast', 'tendencias'] : [cat];
     const lists = await Promise.all(queries.map((q) => YT.search(q).catch(() => ({ videos: [] }))));
@@ -299,7 +463,7 @@ const routes = {
     input.value = q;
     addSearch(q);
     v.appendChild(el(`<h1 class="page-title">Resultados para “${esc(q)}”</h1>`));
-    const body = el(`<div>${loading()}</div>`);
+    const body = el(`<div>${skeleton('grid')}</div>`);
     v.appendChild(body);
     const p = await YT.searchAll(q);
     body.innerHTML = '';
@@ -312,7 +476,7 @@ const routes = {
       });
       body.appendChild(row);
     }
-    if (!p.videos.length) { body.appendChild(el('<div class="empty"><h3>Sin resultados</h3><p>Prueba con otras palabras.</p></div>')); return; }
+    if (!p.videos.length) { body.appendChild(el(emptyBox('search', 'Sin resultados', 'Prueba con otras palabras.'))); return; }
     return infinite(body, p);
   },
 
@@ -320,6 +484,11 @@ const routes = {
     v.appendChild(section('Explorar categorías'));
     const cats = [
       ['Películas', 'películas completas en español', 'movie', '#7A1F2B', '#2A0A10'],
+      ['Series', 'series tráiler oficial', 'tv', '#3b2a8a', '#120b33'],
+      ['Conciertos', 'concierto en vivo completo', 'mic', '#8a1f6e', '#2b0a22'],
+      ['En vivo ahora', 'en vivo ahora', 'live', '#b0101f', '#3a050b'],
+      ['Podcasts', 'podcast', 'mic', '#4a4f5a', '#15171b'],
+      ['Mixes para ti', 'mix ' + (interests(1)[0] || 'música'), 'music', '#6d2bb0', '#200b38'],
       ['Videojuegos', 'videojuegos gameplay', 'game', '#2346B8', '#0B1640'],
       ['Música', 'música 2026', 'music', '#8E2DC6', '#2B0B42'],
       ['Deportes', 'deportes resumen', 'sports', '#1F8A4C', '#0A2E19'],
@@ -350,20 +519,32 @@ const routes = {
     const info = v.querySelector('.w-info');
     let details = null;
     let nextVideo = null;
-    const p = createPlayer(v.querySelector('.player-host'), {
-      onClose: () => back(),
-      onTitle: () => info.querySelector('.desc')?.classList.add('open'),
-      onEnded: () => { if (store.settings.autoplay && nextVideo) go('watch', { v: nextVideo }, false); },
-    });
-    p.load(video.id, video);
+    let full = video;
+    let p, popts;
+    if (mini && mini.video.id === video.id) {
+      ({ p, popts } = takeMini());
+      v.querySelector('.player-host').appendChild(p.root);
+    } else {
+      popts = {};
+      p = createPlayer(v.querySelector('.player-host'), popts);
+      p.load(video.id, video);
+    }
+    popts.onClose = () => back();
+    popts.onTitle = () => info.querySelector('.desc')?.classList.add('open');
+    popts.onEnded = () => { if (store.settings.autoplay && nextVideo) go('watch', { v: nextVideo }, false); };
+    // Al salir mientras se reproduce, el video sigue en el reproductor flotante
+    const leave = (next) => {
+      if (next !== 'watch' && next !== 'shorts' && !p.video.paused && !p.video.ended && !document.fullscreenElement) return toMini(p, popts, full);
+      return p.destroy();
+    };
     addHistory(video);
     try {
       details = await YT.details(video.id);
     } catch (e) {
       info.innerHTML = `<h1 class="w-title">${esc(video.title)}</h1><p class="muted">No se pudieron cargar los detalles: ${esc(e.message)}</p>`;
-      return () => p.destroy();
+      return leave;
     }
-    const full = { ...video, title: details.title || video.title, channel: details.channel || video.channel, channelId: details.channelId || video.channelId, avatar: details.avatar || video.avatar, seconds: details.seconds || video.seconds };
+    full = { ...video, title: details.title || video.title, channel: details.channel || video.channel, channelId: details.channelId || video.channelId, avatar: details.avatar || video.avatar, seconds: details.seconds || video.seconds };
     addHistory(full);
     const watched = new Set(store.history.slice(0, 50).map((x) => x.id));
     nextVideo = details.related.find((r) => !watched.has(r.id)) || details.related[0] || null;
@@ -441,7 +622,7 @@ const routes = {
         <div><b>${esc(x.author)}</b> <span class="muted">${esc(x.date)}</span><p>${esc(x.text)}</p>${x.likes ? `<span class="muted">${icon('thumbUp', 14)} ${esc(x.likes)}</span>` : ''}</div></div>`).join('')
         : '<p class="muted">No hay comentarios.</p>';
     });
-    return () => p.destroy();
+    return leave;
   },
 
   async shorts(v, { start, list }) {
@@ -502,7 +683,7 @@ const routes = {
   async subs(v) {
     const subs = store.subs;
     v.appendChild(el('<h1 class="page-title">Suscripciones</h1>'));
-    if (!subs.length) { v.appendChild(el('<div class="empty"><h3>Aún no tienes suscripciones</h3><p>Entra a un canal y toca Suscribirse.</p></div>')); return; }
+    if (!subs.length) { v.appendChild(el(emptyBox('subs', 'Aún no tienes suscripciones', 'Entra a un canal y toca Suscribirse para ver aquí sus videos nuevos.', '<button class="btn-red go-explore">Explorar</button>'))); v.querySelector('.go-explore').onclick = () => go('explore'); return; }
     const row = el('<div class="sub-row"></div>');
     subs.forEach((c) => {
       const b = el(`<button class="sub-ch"><div class="avatar big">${c.avatar ? `<img src="${esc(c.avatar)}">` : ''}</div><span>${esc(c.name)}</span></button>`);
@@ -510,12 +691,12 @@ const routes = {
       row.appendChild(b);
     });
     v.appendChild(row);
-    const body = el(`<div>${loading()}</div>`);
+    const body = el(`<div>${skeleton('grid')}</div>`);
     v.appendChild(body);
     const lists = await Promise.all(subs.slice(0, 20).map((c) => YT.channelLatest(c.id, 8)));
     body.innerHTML = '';
     const vids = interleave(lists);
-    if (!vids.length) { body.appendChild(el('<div class="empty"><h3>Sin videos nuevos</h3></div>')); return; }
+    if (!vids.length) { body.appendChild(el(emptyBox('subs', 'Sin videos nuevos'))); return; }
     body.appendChild(grid(vids));
   },
 
@@ -523,7 +704,7 @@ const routes = {
     v.appendChild(el('<h1 class="page-title">Biblioteca</h1>'));
     const lists = [
       ['history', 'Historial', 'history', store.history],
-      ['later', 'Ver más tarde', 'clock', store.later],
+      ['later', 'Mi lista (Ver más tarde)', 'clock', store.later],
       ['liked', 'Videos que me gustan', 'thumbUp', store.liked],
     ];
     const menu = el('<div class="lib-menu"></div>');
@@ -546,7 +727,7 @@ const routes = {
   async list(v, { kind, title }) {
     v.appendChild(el(`<h1 class="page-title">${esc(title)}</h1>`));
     const list = store[kind] || [];
-    if (!list.length) { v.appendChild(el('<div class="empty"><h3>No hay videos aquí</h3></div>')); return; }
+    if (!list.length) { v.appendChild(el(emptyBox(kind === 'history' ? 'history' : kind === 'later' ? 'clock' : 'thumbUp', 'No hay videos aquí', kind === 'later' ? 'Usa “Mi lista” o el menú ⋮ de una tarjeta para guardar videos.' : ''))); return; }
     const remove = { history: (x) => removeHistory(x.id), later: (x) => toggleLater(x), liked: (x) => toggleLike(x) }[kind];
     const g = el('<div class="grid"></div>');
     list.forEach((x) => g.appendChild(card(x, { onRemove: () => remove(x) })));
@@ -613,7 +794,7 @@ const routes = {
       </div></div>
       <div class="set-group"><h4>Acerca de</h4><div class="card-bg">
         <button class="set-row upd"><span class="tile">${icon('update', 22)}</span><div><b>Buscar actualizaciones</b><span class="upd-st">Desde GitHub</span></div>${icon('chevron', 22)}</button>
-        <div class="set-row"><span class="tile">${icon('info', 22)}</span><div><b>Vidtube para PC</b><span>Versión ${esc(VERSION)} · Funciona con YouTube.js · Atajos: espacio, ← →, F, M, C</span></div></div>
+        <div class="set-row"><span class="tile">${icon('info', 22)}</span><div><b>Vidtube para PC</b><span>Versión ${esc(VERSION)} · Funciona con YouTube.js · Atajos: espacio, ← →, F, M, C, P</span></div></div>
         <button class="set-row dbg"><span class="tile">${icon('bug', 22)}</span><div><b>Diagnóstico</b><span>Registro para revisar problemas de reproducción</span></div>${icon('chevron', 22)}</button>
         <pre class="dbg-log"></pre>
       </div></div></div>`;
@@ -628,6 +809,54 @@ const routes = {
 // ---------- Explorar desde la barra de búsqueda vacía ----------
 input.addEventListener('keydown', (e) => { if (e.key === 'Escape') input.blur(); });
 app.querySelector('.searchbar button').addEventListener('click', (e) => { if (!input.value.trim()) { e.preventDefault(); go('explore'); } });
+
+// ---------- Reproductor flotante ----------
+let mini = null;
+function toMini(p, popts, video) {
+  const d = el(`<div class="mini" role="region" aria-label="Reproductor flotante">
+      <div class="mini-host"><div class="mini-hit" title="Volver al video"></div></div>
+      <div class="mini-bar">
+        <div class="mini-txt"><b>${esc(video.title)}</b><span>${esc(video.channel || '')}</span></div>
+        <button class="iconbtn m-play" title="Pausar o reproducir" aria-label="Pausar o reproducir"></button>
+        <button class="iconbtn m-pip" title="Imagen en imagen" aria-label="Imagen en imagen">${icon('pip', 20)}</button>
+        <button class="iconbtn m-open" title="Volver al video" aria-label="Volver al video">${icon('expand', 20)}</button>
+        <button class="iconbtn m-close" title="Cerrar" aria-label="Cerrar">${icon('close', 20)}</button>
+      </div>
+    </div>`);
+  d.querySelector('.mini-host').prepend(p.root);
+  p.root.classList.remove('show');
+  document.body.appendChild(d);
+  const paint = () => { d.querySelector('.m-play').innerHTML = icon(p.video.paused ? 'play' : 'pause', 22); };
+  paint();
+  p.video.addEventListener('play', paint);
+  p.video.addEventListener('pause', paint);
+  popts.onEnded = () => closeMini();
+  popts.onClose = () => closeMini();
+  popts.onTitle = () => {};
+  const open = () => go('watch', { v: video });
+  d.querySelector('.mini-hit').onclick = open;
+  d.querySelector('.m-open').onclick = open;
+  d.querySelector('.m-play').onclick = () => (p.video.paused ? p.video.play() : p.video.pause());
+  d.querySelector('.m-pip').onclick = async () => {
+    try { document.pictureInPictureElement ? await document.exitPictureInPicture() : await p.video.requestPictureInPicture(); }
+    catch (e) { toast('Imagen en imagen no disponible'); }
+  };
+  d.querySelector('.m-close').onclick = () => closeMini();
+  mini = { p, popts, video, d, paint };
+}
+function takeMini() {
+  const m = mini; mini = null;
+  m.p.video.removeEventListener('play', m.paint);
+  m.p.video.removeEventListener('pause', m.paint);
+  m.d.remove();
+  return m;
+}
+function closeMini() {
+  if (!mini) return;
+  const m = takeMini();
+  if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
+  m.p.destroy();
+}
 
 // ---------- Suscripciones en la barra lateral ----------
 function paintSideSubs() {
@@ -662,7 +891,7 @@ async function checkUpdate(manual) {
 }
 
 // Acceso para pruebas automáticas
-window.__vt = { go, debug: () => YT.debug };
+window.__vt = { go, debug: () => YT.debug, mini: () => !!mini };
 
 // ---------- Arranque ----------
 (async () => {

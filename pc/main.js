@@ -20,9 +20,9 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1380,
     height: 880,
-    minWidth: 960,
+    minWidth: 400,
     minHeight: 620,
-    backgroundColor: '#09090B',
+    backgroundColor: '#08090B',
     autoHideMenuBar: true,
     title: 'Vidtube',
     icon: path.join(__dirname, 'assets', 'icon.png'),
@@ -60,16 +60,30 @@ async function runShots(win) {
   await wait(1200); await shot('0-splash');
   await wait(22000); await shot('1-home');
   const js = (code) => win.webContents.executeJavaScript(code).catch((e) => fs.appendFileSync(path.join(dir, 'console.txt'), 'JS ' + e + '\n'));
-  await js("document.querySelector('#view').scrollTop = 900"); await wait(1500); await shot('2-home-scroll');
-  await js("window.__vt.go('explore')"); await wait(2000); await shot('3-explore');
-  await js("window.__vt.go('search', {q: 'cumbia'})"); await wait(9000); await shot('4-search');
-  await js("document.querySelector('.card').click()"); await wait(15000); await shot('5-watch');
-  await js("document.querySelector('.w-channel .avatar')?.click()"); await wait(10000); await shot('6-channel');
-  await js("window.__vt.go('settings')"); await wait(1500); await shot('7-settings');
-  await js("window.__vt.go('library')"); await wait(1500); await shot('8-library');
-  await js("window.__vt.go('shorts')"); await wait(14000); await shot('9-shorts');
+  await js("document.querySelector('#view').scrollTop = 600"); await wait(1500); await shot('2-home-scroll');
+  await js("document.querySelector('#view').scrollTop = 1300"); await wait(1500); await shot('2b-home-scroll');
+  await js("document.querySelector('.shelf .card .kebab')?.click()"); await wait(600); await shot('3-menu');
+  await js("document.querySelector('.menu-btn').click(); document.querySelector('#view').scrollTop = 0; document.querySelector('.avatar-btn').click()"); await wait(1200); await shot('4-collapsed-profile');
+  await js("document.querySelector('.avatar-btn').click(); document.querySelector('.menu-btn').click()");
+  await js("window.__vt.go('explore')"); await wait(2000); await shot('5-explore');
+  await js("window.__vt.go('search', {q: 'cumbia'})"); await wait(9000); await shot('6-search');
+  await js("document.querySelector('.grid .card').click()"); await wait(25000); await shot('7-watch');
+  // Prueba del reproductor flotante: salir del video mientras se reproduce
+  await js("window.__vt.go('library')"); await wait(4000); await shot('8-mini-library');
+  // Posición guardada de un video real del historial para ver "Continuar viendo"
+  await js("(() => { const h = JSON.parse(localStorage.vt_history || '[]').filter((v) => v.seconds); const p = JSON.parse(localStorage.vt_positions || '{}'); h.slice(0, 3).forEach((v, i) => { if (!p[v.id]) p[v.id] = Math.floor(v.seconds * (0.3 + i * 0.2)); }); localStorage.vt_positions = JSON.stringify(p); })()");
+  await js("window.__vt.go('home')"); await wait(15000); await shot('9-home-mini');
+  await js("document.querySelector('.mini .m-open')?.click()"); await wait(4000); await shot('10-watch-again');
+  await js("window.__vt.go('channel', {id: 'UCBR8-60-B28hp2BmDPdntcQ'})"); await wait(10000); await shot('11-channel');
+  await js("window.__vt.go('settings')"); await wait(1500); await shot('12-settings');
+  await js("window.__vt.go('subs')"); await wait(4000); await shot('13-subs');
+  await js("window.__vt.go('shorts')"); await wait(14000); await shot('14-shorts');
   fs.writeFileSync(path.join(dir, 'debug.txt'), String(await js('window.__vt.debug().join("\\n")')));
-  await js("localStorage.setItem('vt_settings', JSON.stringify({light:true})); location.reload()"); await wait(20000); await shot('10-light');
+  await js("window.__vt.go('home')"); await wait(1000);
+  win.setSize(430, 900); await wait(15000); await shot('15-movil');
+  win.setSize(1380, 880);
+  await js("localStorage.setItem('vt_settings', JSON.stringify({light:true})); location.reload()"); await wait(22000); await shot('16-light');
+  await js("document.querySelector('#view').scrollTop = 600"); await wait(1500); await shot('17-light-scroll');
   app.quit();
 }
 
