@@ -13,7 +13,7 @@ app.whenReady().then(async () => {
   await key('Down', 2); await wait(800); await shot('tv-2-row');
   await key('Down', 2); await wait(800); await shot('tv-2b-descubre');
   await key('Left', 6); await wait(800); await shot('tv-3-rail');
-  await key('Down'); await key('Return'); await wait(4000); await shot('tv-4-explorar');
+  await key('Up', 5); await key('Down'); await key('Return'); await wait(4000); await shot('tv-4-explorar');
   await key('Down', 2); await key('Return'); await wait(9000); await shot('tv-5-results');
   await key('Return'); await wait(12000); await shot('tv-6-watch');
   await key('Up'); await wait(800); await shot('tv-7-watch-ui');
