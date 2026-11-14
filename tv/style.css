@@ -178,3 +178,8 @@ img { display: block; }
 .card .thumb { height: 225px; }
 .card.short .thumb { height: 427px; }
 .w-related .card .thumb { height: 191px; }
+
+/* Aviso de actualización en Configuración */
+.upd-box { background: var(--card); border: 2px solid rgba(242,13,37,.5); border-radius: 26px; padding: 26px 40px; font-size: 26px; line-height: 1.45; }
+.upd-box ul { margin: 12px 0; padding-left: 34px; }
+.upd-box p { color: var(--muted); margin: 0; }

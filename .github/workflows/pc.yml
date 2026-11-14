@@ -18,9 +18,17 @@ jobs:
         working-directory: pc
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Notas de la versión
+        shell: bash
+        working-directory: .
+        run: |
+          node .github/scripts/notas.mjs pc "pc-1.*" pc/notas.md pc
+          { cat pc/notas.md; echo; echo "---"; echo "Descarga **Vidtube-Setup-1.0.${{ github.run_number }}.exe** e instálalo (o usa el botón Actualizar de la app)."; echo 'Si Windows muestra "Windows protegió tu PC": Más información → Ejecutar de todas formas.'; } > pc/body.md
       - name: Versión
         shell: bash
         run: |
@@ -45,10 +53,7 @@ jobs:
           tag_name: pc-${{ env.VERSION }}
           name: Vidtube PC ${{ env.VERSION }}
           make_latest: "false"
-          body: |
-            Vidtube para Windows ${{ env.VERSION }}.
-            Descarga **Vidtube-Setup-${{ env.VERSION }}.exe** e instálalo.
-            Si Windows muestra "Windows protegió tu PC": Más información → Ejecutar de todas formas.
+          body_path: pc/body.md
           files: pc/release/Vidtube-Setup-${{ env.VERSION }}.exe
 
   screenshots:

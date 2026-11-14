@@ -868,19 +868,39 @@ paintSideSubs(); onChange(paintSideSubs);
 // ---------- Actualizaciones (GitHub) ----------
 const verNum = (s) => String(s).split('.').map((n) => parseInt(n, 10) || 0);
 const newer = (a, b) => { const x = verNum(a), y = verNum(b); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+/** Razones de la actualización (lista "Por qué se actualiza" de la versión publicada). */
+const reasonsOf = (body) => String(body || '').split(/\n-{3,}/)[0].split('\n')
+  .filter((l) => /^\s*[-*] /.test(l)).map((l) => l.replace(/^\s*[-*] /, '').trim()).filter(Boolean);
+function updateDialog(ver, url, reasons) {
+  const list = reasons.length ? reasons : ['Mejoras internas de estabilidad y rendimiento'];
+  const d = el(`<div class="modal-back"><div class="modal" role="dialog" aria-modal="true" aria-label="Actualización disponible">
+      <h3>${icon('update', 22)} Vidtube ${esc(ver)} disponible</h3>
+      <p class="muted">Por qué se actualiza:</p>
+      <ul>${list.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      <div class="modal-btns"><button class="btn-ghost later">Más tarde</button><button class="btn-red go">${icon('update', 18)} Descargar e instalar</button></div>
+    </div></div>`);
+  const close = () => d.remove();
+  d.querySelector('.later').onclick = close;
+  d.addEventListener('mousedown', (e) => { if (e.target === d) close(); });
+  d.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  d.querySelector('.go').onclick = () => { window.open(url); close(); };
+  document.body.appendChild(d);
+  d.querySelector('.go').focus();
+}
 async function checkUpdate(manual) {
   try {
-    const r = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`);
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=60`);
     const rel = (await r.json()).find((x) => (x.assets || []).some((a) => a.name.endsWith('.exe')));
     if (!rel) return 'No hay versiones para PC todavía';
     const asset = rel.assets.find((a) => a.name.endsWith('.exe'));
     const ver = (asset.name.match(/(\d+\.\d+\.\d+)/) || [])[1];
     if (ver && VERSION !== 'dev' && newer(ver, VERSION)) {
+      const reasons = reasonsOf(rel.body);
       const pill = app.querySelector('.update-pill');
-      pill.innerHTML = `<button class="btn-red">${icon('update', 18)} Actualizar a ${esc(ver)}</button>`;
-      pill.querySelector('button').onclick = () => window.open(asset.browser_download_url);
-      if (manual) window.open(asset.browser_download_url);
-      return `Disponible: ${ver} (se descarga en tu navegador)`;
+      pill.innerHTML = `<button class="btn-red" title="${esc(reasons.join(' · '))}">${icon('update', 18)} Actualizar a ${esc(ver)}</button>`;
+      pill.querySelector('button').onclick = () => updateDialog(ver, asset.browser_download_url, reasons);
+      if (manual) updateDialog(ver, asset.browser_download_url, reasons);
+      return `Disponible: ${ver}${reasons[0] ? ' · ' + reasons[0] : ''}`;
     }
     return 'Tienes la última versión';
   } catch (e) {

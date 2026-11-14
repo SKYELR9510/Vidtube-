@@ -363,15 +363,47 @@ const routes = {
         <button class="f set-row a"><b>Reproducción automática</b><span>${s.autoplay ? 'Activada' : 'Desactivada'}</span></button>
         <button class="f set-row h"><b>Guardar historial</b><span>${s.saveHistory ? 'Activado' : 'Desactivado'}</span></button>
         <button class="f set-row d"><b>Diagnóstico</b><span>Registro para revisar problemas</span></button>
+        <button class="f set-row u"><b>Actualizaciones</b><span class="u-st">${tvUpdate ? 'Versión ' + esc(tvUpdate.ver) + ' disponible' : 'Buscar versión nueva'}</span></button>
+        <div class="upd-box ${tvUpdate ? '' : 'hidden'}"></div>
         <div class="set-row info"><b>Vidtube para TV</b><span>Versión ${esc(VERSION)}</span></div>
         <pre class="dbg hidden"></pre>
       </div>`;
     view.querySelector('.q').onclick = () => { const i = qOpts.indexOf(String(store.settings.quality)); setSettings({ quality: qOpts[(i + 1) % qOpts.length] }); go('settings', {}, false); };
     view.querySelector('.a').onclick = () => { setSettings({ autoplay: !store.settings.autoplay }); go('settings', {}, false); };
     view.querySelector('.h').onclick = () => { setSettings({ saveHistory: !store.settings.saveHistory }); go('settings', {}, false); };
+    const paintUpd = () => {
+      const box = view.querySelector('.upd-box');
+      if (!tvUpdate) { box.classList.add('hidden'); return; }
+      box.innerHTML = `<b>Vidtube TV ${esc(tvUpdate.ver)} · por qué se actualiza:</b><ul>${tvUpdate.reasons.map((x) => `<li>${esc(x)}</li>`).join('')}</ul><p>Para instalarla, abre Apps2Samsung en tu PC y elige el archivo Vidtube-TV-${esc(tvUpdate.ver)}.wgt de GitHub.</p>`;
+      box.classList.remove('hidden');
+    };
+    paintUpd();
+    view.querySelector('.u').onclick = async () => {
+      view.querySelector('.u-st').textContent = 'Revisando…';
+      const r = await checkTvUpdate();
+      view.querySelector('.u-st').textContent = r;
+      paintUpd();
+    };
     view.querySelector('.d').onclick = () => { const d = view.querySelector('.dbg'); d.textContent = YT.debug.join('\n') || 'Sin registros todavía.'; d.classList.toggle('hidden'); };
   },
 };
+
+// ---------- Actualizaciones (avisa la versión nueva y por qué) ----------
+let tvUpdate = null;
+const verNum = (x) => String(x).split('.').map((n) => parseInt(n, 10) || 0);
+const isNewer = (a, b) => { const x = verNum(a), y = verNum(b); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+async function checkTvUpdate() {
+  try {
+    const r = await fetch('https://api.github.com/repos/SKYELR9510/Vidtube-/releases?per_page=60');
+    const rel = (await r.json()).find((x) => /^tv-\d/.test(x.tag_name || ''));
+    if (!rel) return 'No hay versiones publicadas';
+    const ver = rel.tag_name.replace(/^tv-/, '');
+    if (!isNewer(ver, VERSION)) { tvUpdate = null; return 'Tienes la última versión'; }
+    const reasons = String(rel.body || '').split(/\n-{3,}/)[0].split('\n').filter((l) => /^\s*[-*] /.test(l)).map((l) => l.replace(/^\s*[-*] /, '').trim()).filter(Boolean);
+    tvUpdate = { ver, reasons: reasons.length ? reasons : ['Mejoras internas de estabilidad y rendimiento'] };
+    return 'Versión ' + ver + ' disponible';
+  } catch (e) { return 'No se pudo revisar'; }
+}
 
 // ---------- Reproductor a pantalla completa ----------
 shaka.polyfill.installAll();
@@ -631,4 +663,6 @@ document.addEventListener('keydown', (e) => {
   setTimeout(() => document.getElementById('splash').classList.add('hide'), 400);
   setTimeout(() => { const s = document.getElementById('splash'); if (s) s.remove(); }, 1200);
   go('home', {}, false);
+  // Aviso de versión nueva con el motivo (los detalles están en Configuración)
+  setTimeout(async () => { await checkTvUpdate(); if (tvUpdate) toast('Vidtube TV ' + tvUpdate.ver + ': ' + tvUpdate.reasons[0] + ' — mira Configuración'); }, 8000);
 })();

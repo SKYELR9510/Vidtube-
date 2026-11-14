@@ -14,6 +14,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -43,15 +49,39 @@ fun UpdateBanner() {
     val state by Updater.state.collectAsState()
     val broken by Updater.youtubeBroken.collectAsState()
 
+    var showWhy by remember { mutableStateOf(false) }
     when (val s = state) {
-        is Updater.State.Available -> Banner(
-            icon = Icons.Outlined.SystemUpdate,
-            title = "Nueva versión de Vidtube",
-            text = s.release.versionName,
-            action = "Actualizar",
-            onAction = { scope.launch { Updater.download(context, s.release) } },
-            onClose = { Updater.dismiss() },
-        )
+        is Updater.State.Available -> {
+            val reasons = s.release.reasons.ifEmpty { listOf("Mejoras internas de estabilidad y rendimiento") }
+            Banner(
+                icon = Icons.Outlined.SystemUpdate,
+                title = "Nueva versión: ${s.release.versionName}",
+                text = "Por qué: " + reasons.first() + if (reasons.size > 1) " (y ${reasons.size - 1} más)" else "",
+                action = "Ver",
+                onAction = { showWhy = true },
+                onClose = { Updater.dismiss() },
+            )
+            if (showWhy) {
+                AlertDialog(
+                    onDismissRequest = { showWhy = false },
+                    title = { Text("${s.release.versionName} disponible") },
+                    text = {
+                        Column(Modifier.verticalScroll(rememberScrollState())) {
+                            Text("Por qué se actualiza:", fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(8.dp))
+                            reasons.forEach { r -> Text("• $r", modifier = Modifier.padding(bottom = 6.dp)) }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showWhy = false
+                            scope.launch { Updater.download(context, s.release) }
+                        }) { Text("Actualizar", color = VColors.Red, fontWeight = FontWeight.Bold) }
+                    },
+                    dismissButton = { TextButton(onClick = { showWhy = false }) { Text("Más tarde") } },
+                )
+            }
+        }
         is Updater.State.Downloading -> Banner(
             icon = Icons.Outlined.SystemUpdate,
             title = "Descargando actualización…",

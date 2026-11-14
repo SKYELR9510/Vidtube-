@@ -98,7 +98,8 @@ fun SettingsScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
                         when (val u = update) {
                             is Updater.State.Checking -> "Revisando…"
                             is Updater.State.UpToDate -> "Tienes la última versión"
-                            is Updater.State.Available -> "Disponible: ${u.release.versionName} (míralo en Inicio)"
+                            is Updater.State.Available -> "Disponible: ${u.release.versionName}. Por qué: " +
+                                (u.release.reasons.firstOrNull() ?: "mejoras internas") + " (detalles en Inicio)"
                             is Updater.State.Downloading -> "Descargando ${(u.progress * 100).toInt()} %"
                             is Updater.State.Failed -> u.message
                             else -> "Desde GitHub"

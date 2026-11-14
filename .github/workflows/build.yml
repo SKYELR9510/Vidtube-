@@ -60,16 +60,16 @@ jobs:
           mkdir -p out
           cp app/build/outputs/apk/release/app-release.apk "out/Vidtube-$CODE.apk"
           echo "VIDTUBE_CODE=$CODE" >> "$GITHUB_ENV"
-          echo "MSG=$(git log -1 --pretty=%s)" >> "$GITHUB_ENV"
+          node .github/scripts/notas.mjs android "build-*" out/notas.md app gradle build.gradle.kts settings.gradle.kts gradle.properties
 
+      - name: Notas de la versión
+        run: |
+          { cat out/notas.md; echo; echo "---"; echo "Instala **Vidtube-$VIDTUBE_CODE.apk** o actualiza desde la misma app."; } > out/body.md
       - name: Publicar versión
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ env.VIDTUBE_CODE }}
           name: Vidtube 1.3.${{ env.VIDTUBE_BUILD }}
-          body: |
-            ${{ env.MSG }}
-
-            Instala **Vidtube-${{ env.VIDTUBE_CODE }}.apk** o actualiza desde la misma app.
+          body_path: out/body.md
           files: out/Vidtube-${{ env.VIDTUBE_CODE }}.apk
           make_latest: true

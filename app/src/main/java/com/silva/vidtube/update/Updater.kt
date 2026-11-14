@@ -32,7 +32,15 @@ object Updater {
         val notes: String,
         val apkUrl: String,
         val sizeBytes: Long,
-    )
+    ) {
+        /** Lista "Por qué se actualiza" de la versión publicada. */
+        val reasons: List<String>
+            get() = notes.split(Regex("\\n-{3,}"))[0].lines()
+                .map { it.trim() }
+                .filter { it.startsWith("- ") || it.startsWith("* ") }
+                .map { it.drop(2).trim() }
+                .filter { it.isNotEmpty() }
+    }
 
     sealed interface State {
         data object Idle : State

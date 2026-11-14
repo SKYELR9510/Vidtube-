@@ -442,3 +442,15 @@ button.set-row:hover { background: rgba(255, 255, 255, .03); }
 /* Subtítulos centrados abajo, estilo YouTube */
 .vp-video::cue { background: rgba(8, 8, 8, .75); color: #fff; font-family: "Segoe UI", Roboto, sans-serif; font-size: 1.05em; line-height: 1.35; }
 .vp.cinema .vp-video::cue { font-size: 1.25em; }
+
+/* Ventana de actualización */
+.modal-back { position: fixed; inset: 0; z-index: 120; background: rgba(8, 9, 11, .6); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 16px; animation: pop .15s ease-out; }
+.modal { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; background: var(--raise); border: 1px solid var(--divider); border-radius: var(--r-lg); padding: 22px 24px; box-shadow: var(--shadow-lg); }
+.modal h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 19px; }
+.modal h3 .ic { color: var(--red); }
+.modal p { margin: 0 0 8px; }
+.modal ul { margin: 0 0 18px; padding-left: 20px; line-height: 1.5; }
+.modal li { margin-bottom: 4px; }
+.modal-btns { display: flex; justify-content: flex-end; gap: 10px; }
+.btn-ghost { padding: 10px 18px; border-radius: 22px; background: var(--chip); font-weight: 600; }
+.btn-ghost:hover { filter: brightness(1.15); }
