@@ -9,6 +9,8 @@ Platform.shim.eval = async (data, env) => {
   if (env.n) props.push(`n: exportedVars.nFunction("${env.n}")`);
   if (env.sig) props.push(`sig: exportedVars.sigFunction("${env.sig}")`);
   const code = `${data.output}\nreturn { ${props.join(', ')} }`;
+  // En la PC se ejecuta en una ventana aislada sin red; en el TV, aquí mismo
+  if (typeof window !== 'undefined' && window.vtNative?.evalPlayer) return window.vtNative.evalPlayer(code);
   return new Function(code)();
 };
 

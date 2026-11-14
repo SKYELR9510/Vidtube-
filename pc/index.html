@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; media-src 'self' https: blob: data:; connect-src 'self' https: data: blob:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; media-src 'self' https: blob: data:; connect-src 'self' https: data: blob:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Vidtube</title>
   <link rel="stylesheet" href="dist/style.css">
@@ -15,6 +15,7 @@
     <div class="spinner"></div>
   </div>
   <div id="app"></div>
-  <script type="module" src="dist/app.js"></script>
+  <script src="dist/netbridge.js"></script>
+  <script src="dist/app.js"></script>
 </body>
 </html>

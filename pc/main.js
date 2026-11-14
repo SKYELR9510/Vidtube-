@@ -1,5 +1,6 @@
 // Vidtube para PC (Electron): ventana principal y ajustes de red
-const { app, BrowserWindow, session, shell, ipcMain, net } = require('electron');
+const { app, BrowserWindow, session, shell, ipcMain, net, protocol } = require('electron');
+const { fileURLToPath, pathToFileURL } = require('url');
 const fs = require('fs');
 const path = require('path');
 
@@ -24,6 +25,10 @@ function isSafeExternal(url) {
   } catch { return false; }
 }
 
+let mainWin = null;
+/** Solo la ventana principal de la app (cargada desde sus propios archivos) puede usar el puente. */
+const fromApp = (e) => !!mainWin && e.sender === mainWin.webContents && !!e.senderFrame && String(e.senderFrame.url).startsWith('file://');
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1380,
@@ -36,13 +41,21 @@ function createWindow() {
     icon: path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      // La app habla directo con YouTube (sin servidor intermedio)
-      webSecurity: false,
+      // Protecciones del navegador activadas: la red pasa por el proceso principal (ver net-fetch)
+      webSecurity: true,
+      allowRunningInsecureContent: false,
       contextIsolation: true,
       nodeIntegration: false,
+      nodeIntegrationInWorker: false,
+      nodeIntegrationInSubFrames: false,
+      sandbox: true,
+      webviewTag: false,
+      spellcheck: false,
       backgroundThrottling: false,
     },
   });
+  mainWin = win;
+  win.on('closed', () => { if (mainWin === win) mainWin = null; });
   win.removeMenu();
   win.loadFile(path.join(__dirname, 'index.html'), { query: { v: app.getVersion() } });
   // Links externos (descargar actualización, etc.): solo https de sitios conocidos, en el navegador
@@ -115,7 +128,7 @@ function ensureBgWindow() {
     }
     return net.fetch(req, { bypassCustomProtocolHandlers: true });
   });
-  bgWin = new BrowserWindow({ show: false, width: 400, height: 300, webPreferences: { session: ses, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+  bgWin = new BrowserWindow({ show: false, width: 400, height: 300, webPreferences: { session: ses, contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
   const code = fs.readFileSync(path.join(__dirname, 'dist', 'pot.js'), 'utf8');
   bgReady = bgWin.loadURL(BG_URL).then(() => bgWin.webContents.executeJavaScript(code + ';true'));
   bgReady.catch(() => { bgReady = null; });
@@ -123,17 +136,82 @@ function ensureBgWindow() {
 }
 ipcMain.handle('mint-pot', async (e, identifier) => {
   // Solo la ventana de la app puede pedirlo, y con un identificador de video válido
-  if (!e.senderFrame || !String(e.senderFrame.url).startsWith('file://')) throw new Error('origen no permitido');
+  if (!fromApp(e)) throw new Error('origen no permitido');
   identifier = String(identifier);
   if (!/^[A-Za-z0-9_%=+\/.-]{1,256}$/.test(identifier)) throw new Error('identificador inválido');
   await ensureBgWindow();
   return bgWin.webContents.executeJavaScript(`window.__vtMint(${JSON.stringify(String(identifier))})`);
 });
 
+// ---------- Red de la app (desde el proceso principal, solo a sitios permitidos) ----------
+const ALLOWED_HOSTS = /(^|\.)(youtube\.com|youtu\.be|googlevideo\.com|googleapis\.com|google\.com|ytimg\.com|ggpht\.com|github\.com|githubusercontent\.com)$/i;
+const ALLOWED_METHODS = new Set(['GET', 'HEAD', 'POST', 'OPTIONS']);
+const inflight = new Map();
+ipcMain.handle('net-fetch', async (e, req) => {
+  if (!fromApp(e)) return { error: 'origen no permitido' };
+  const { id, url, method, headers, body } = req || {};
+  let u;
+  try { u = new URL(String(url)); } catch { return { error: 'dirección inválida' }; }
+  if (u.protocol !== 'https:' || !ALLOWED_HOSTS.test(u.hostname)) return { error: 'destino no permitido' };
+  const m = String(method || 'GET').toUpperCase();
+  if (!ALLOWED_METHODS.has(m)) return { error: 'método no permitido' };
+  const h = {};
+  if (headers && typeof headers === 'object') {
+    for (const [k, v] of Object.entries(headers)) if (typeof k === 'string' && typeof v === 'string' && !/[\r\n]/.test(k + v)) h[k] = v;
+  }
+  if (body != null && typeof body !== 'string' && !(body instanceof ArrayBuffer) && !ArrayBuffer.isView(body)) return { error: 'contenido inválido' };
+  const ac = new AbortController();
+  if (Number.isInteger(id)) inflight.set(id, ac);
+  try {
+    const r = await session.defaultSession.fetch(u.href, { method: m, headers: h, body: m === 'GET' || m === 'HEAD' ? undefined : body, signal: ac.signal, redirect: 'follow', bypassCustomProtocolHandlers: true });
+    const buf = m === 'HEAD' ? null : await r.arrayBuffer();
+    const hs = [];
+    r.headers.forEach((v, k) => { if (k !== 'content-encoding' && k !== 'content-length') hs.push([k, v]); });
+    return { status: r.status, statusText: r.statusText, headers: hs, url: r.url, body: buf };
+  } catch (err) {
+    return { error: String((err && err.message) || err).slice(0, 200) };
+  } finally {
+    inflight.delete(id);
+  }
+});
+ipcMain.on('net-abort', (e, id) => { if (fromApp(e)) inflight.get(id)?.abort(); });
+
+// ---------- Código del reproductor de YouTube: en una ventana aislada, sin red ni acceso a la app ----------
+let evalWin = null;
+let evalReady = null;
+function ensureEvalWindow() {
+  if (evalReady && evalWin && !evalWin.isDestroyed()) return evalReady;
+  const ses = session.fromPartition('vidtube-eval');
+  ses.webRequest.onBeforeRequest((d, cb) => cb({ cancel: !d.url.startsWith('about:') }));
+  ses.setPermissionRequestHandler((_wc, _p, cb) => cb(false));
+  evalWin = new BrowserWindow({ show: false, width: 200, height: 200, webPreferences: { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  evalReady = evalWin.loadURL('about:blank');
+  evalReady.catch(() => { evalReady = null; });
+  return evalReady;
+}
+ipcMain.handle('eval-player', async (e, code) => {
+  if (!fromApp(e)) throw new Error('origen no permitido');
+  if (typeof code !== 'string' || code.length > 8 * 1024 * 1024) throw new Error('código inválido');
+  await ensureEvalWindow();
+  return evalWin.webContents.executeJavaScript('(function(){' + code + '\n})()');
+});
+
 // En las pruebas automáticas (sin tarjeta de video) se dibuja por software para poder tomar capturas
 if (process.env.VIDTUBE_SHOTS) app.disableHardwareAcceleration();
 
 app.whenReady().then(() => {
+  // Archivos locales: la app solo puede leer su propia carpeta
+  const appRoot = path.resolve(__dirname);
+  protocol.handle('file', (req) => {
+    let p;
+    try { p = path.resolve(fileURLToPath(req.url)); } catch { return new Response('No permitido', { status: 403 }); }
+    if (p !== appRoot && !p.startsWith(appRoot + path.sep)) return new Response('No permitido', { status: 403 });
+    return net.fetch(pathToFileURL(p).href, { bypassCustomProtocolHandlers: true });
+  });
+  // Permisos: solo pantalla completa y copiar enlaces; todo lo demás (cámara, micrófono, ubicación…) se niega
+  const ALLOWED_PERMS = new Set(['fullscreen', 'clipboard-sanitized-write']);
+  session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(ALLOWED_PERMS.has(perm)));
+  session.defaultSession.setPermissionCheckHandler((_wc, perm) => ALLOWED_PERMS.has(perm));
   const filter = { urls: ['*://*.googlevideo.com/*', '*://*.youtube.com/*', '*://*.google.com/*', '*://*.ytimg.com/*', '*://youtubei.googleapis.com/*'] };
   session.defaultSession.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
     const h = details.requestHeaders;
@@ -155,6 +233,11 @@ app.whenReady().then(() => {
   });
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+});
+
+app.on('web-contents-created', (_e, wc) => {
+  wc.setWindowOpenHandler(({ url }) => { if (isSafeExternal(url)) shell.openExternal(url); return { action: 'deny' }; });
+  wc.on('will-attach-webview', (ev) => ev.preventDefault());
 });
 
 app.on('window-all-closed', () => app.quit());
