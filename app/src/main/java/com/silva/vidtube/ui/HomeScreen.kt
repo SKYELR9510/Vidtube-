@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.SportsSoccer
 import androidx.compose.material.icons.outlined.Tv
+import androidx.compose.material.icons.outlined.Subscriptions
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -115,11 +116,18 @@ val discoverTiles = listOf(
 )
 
 /** "Todo" + categorías generales. */
-fun buildHomeChips(): List<HomeChip> = listOf(HomeChip("todo", "Todo", Icons.Outlined.Apps)) + fixedChips
+fun buildHomeChips(): List<HomeChip> =
+    listOf(HomeChip("todo", "Todo", Icons.Outlined.Apps), HomeChip("subs", "Suscripciones", Icons.Outlined.Subscriptions)) + fixedChips
 
 /** Contenido de una categoría del Inicio (todas menos "Todo"). */
 suspend fun loadChip(id: String): PagedResult = when {
     id.startsWith("i:") -> Repository.freshSearch(id.removePrefix("i:"))
+    id == "subs" -> PagedResult(
+        Repository.subscriptionFeed(Library.subscriptions.value.take(60))
+            .filter { !it.isShort }
+            .map { FeedEntry.Video(it, "De tus suscripciones") },
+        null,
+    )
     id.startsWith("c:") -> categoryDefs[id.removePrefix("c:")]?.let {
         Repository.categorySearch(it.query, it.minSec, it.noTrailers, it.maxAgeDays)
     } ?: Repository.search(id.removePrefix("c:"))
@@ -171,19 +179,23 @@ class HomeViewModel : ViewModel() {
 
         // Lo más reciente de tus 2 temas principales (últimos ~4 meses)
         val freshJobs = Library.interests(2).map { interest ->
-            async { runCatching { Repository.freshSearch(interest.query, maxAgeDays = 120).items }.getOrDefault(emptyList()) }
+            async {
+                runCatching { Repository.freshSearch(interest.query, maxAgeDays = 120).items }.getOrDefault(emptyList())
+                    .map { e -> if (e is FeedEntry.Video) e.copy(reason = "Porque te interesa «${interest.label}»") else e }
+            }
         }
 
         val watched = Library.history.value.map { it.url }.toHashSet()
-        val forYou = Library.forYou(System.currentTimeMillis()).map { FeedEntry.Video(it) }
+        val forYou = Library.forYou(System.currentTimeMillis()).map { FeedEntry.Video(it, "Parecido a lo que viste") }
         val fresh = freshJobs.map { it.await() }.reduceOrNull { a, b -> interleave(a, b) }.orEmpty()
             .filter { e -> e !is FeedEntry.Video || e.video.url !in watched }
         val subsAll = subsJob.await().filter { it.url !in watched && !it.isShort }
         recentSubs = subsAll.take(12)
-        val subs = subsAll.drop(12).take(40).map { FeedEntry.Video(it) }
+        val subs = subsAll.take(40).map { FeedEntry.Video(it, "De tus suscripciones") }
         val music = musicJob.await()
         val gaming = gamingJob.await()
         val trending = interleave(music.getOrNull()?.items.orEmpty(), gaming.getOrNull()?.items.orEmpty())
+            .map { e -> if (e is FeedEntry.Video) e.copy(reason = "Tendencia") else e }
 
         if (forYou.isEmpty() && subs.isEmpty() && trending.isEmpty() && fresh.isEmpty()) {
             throw music.exceptionOrNull() ?: gaming.exceptionOrNull() ?: Exception("Sin contenido")
@@ -230,28 +242,11 @@ fun HomeScreen(
     }
 
     Column(Modifier.fillMaxSize().background(VColors.Background)) {
+        // Cabecera mínima: logo y perfil (la búsqueda vive en Explorar, al alcance del pulgar)
         VTopBar(leading = { VidtubeLogo() }) {
             ProfileButton(onLibrary = onLibrary, onSettings = onSettings)
         }
         UpdateBanner()
-        // Buscador amplio (abre la pantalla de búsqueda)
-        Row(
-            Modifier
-                .padding(horizontal = 12.dp)
-                .padding(bottom = 10.dp)
-                .fillMaxWidth()
-                .height(44.dp)
-                .clip(RoundedCornerShape(50))
-                .background(VColors.Surface)
-                .border(1.dp, VColors.Divider, RoundedCornerShape(50))
-                .clickable(onClickLabel = "Buscar", onClick = onSearch)
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Un solo ícono de búsqueda, integrado al campo
-            Icon(Icons.Outlined.Search, "Buscar", tint = VColors.Secondary, modifier = Modifier.size(20.dp))
-            Text("Buscar videos, canales, música...", color = VColors.Secondary, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(start = 10.dp))
-        }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -268,7 +263,7 @@ fun HomeScreen(
         val showTip = vm.selected == "todo" && subsNow.isEmpty() && historyNow.size < 3
         // Destacado + fila de Tendencias arriba (cuando ya hay suficientes videos)
         val videos = paged.items.filterIsInstance<FeedEntry.Video>().map { it.video }
-        val featured = paged.items.size >= 16 && paged.items.take(13).all { it is FeedEntry.Video }
+        val featured = paged.items.isNotEmpty()
         val tip: LazyListScope.() -> Unit = {
             if (showTip) {
                 item("tip") {
@@ -280,36 +275,14 @@ fun HomeScreen(
                     )
                 }
             }
-            if (featured) {
-                item("hero") { HeroCarousel(videos.take(5), onPlay = onVideo, onChannel = onChannel) }
-                if (vm.selected == "todo") {
-                    // Continuar viendo: videos con posición guardada
-                    val cont = historyNow.filter { !it.isShort && progressOf(it) != null }.take(12)
-                    if (cont.isNotEmpty()) {
-                        item("cont_title") { SectionTitle("Continuar viendo") }
-                        item("cont") { VideoShelf(cont, onVideo, onChannel, resume = true) }
-                    }
-                    item("shelf_title") {
-                        SectionTitle("Tendencias para ti", onMore = { onMore("todo", "Tendencias para ti") }, subtitle = "Según lo que ves y buscas")
-                    }
-                    item("shelf") { VideoShelf(videos.subList(5, 13), onVideo, onChannel) }
-                    item("disc_title") { SectionTitle("Descubre", subtitle = "Explora por categoría") }
-                    item("disc") { DiscoverGrid(discoverTiles) { vm.selected = it.id } }
-                    val recent = vm.recentSubs
-                    if (recent.isNotEmpty()) {
-                        item("subs_title") { SectionTitle("Novedades de tus suscripciones") }
-                        item("subs_row") { VideoShelf(recent, onVideo, onChannel) }
-                    }
-                    item("feed_title") { SectionTitle("Recomendados para ti") }
-                } else {
-                    item("shelf_title") {
-                        val label = vm.chips.firstOrNull { it.id == vm.selected }?.label ?: ""
-                        val shelfTitle = "Lo más visto · $label"
-                        SectionTitle(shelfTitle, onMore = { onMore(vm.selected, shelfTitle) })
-                    }
-                    item("shelf") { VideoShelf(videos.subList(5, 13), onVideo, onChannel) }
-                    item("feed_title") { SectionTitle("Más videos") }
+            // Lo útil primero: Seguir viendo, y después el feed (sin carrusel)
+            if (vm.selected == "todo") {
+                val cont = historyNow.filter { !it.isShort && progressOf(it) != null }.take(12)
+                if (cont.isNotEmpty()) {
+                    item("cont_title") { SectionTitle("Seguir viendo") }
+                    item("cont") { VideoShelf(cont, onVideo, onChannel, resume = true) }
                 }
+                if (featured) item("feed_title") { SectionTitle("Para ti") }
             }
         }
         PullToRefreshBox(
@@ -331,7 +304,7 @@ fun HomeScreen(
                     emptyTitle = "Nada por aquí todavía",
                     emptySubtitle = "Desliza hacia abajo para recargar.",
                     header = tip,
-                    skip = if (featured) 13 else 0,
+                    skip = 0,
                 )
             }
         }

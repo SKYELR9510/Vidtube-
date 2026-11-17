@@ -180,6 +180,7 @@ fun VideoCard(
     onClick: () -> Unit,
     onChannel: ((String) -> Unit)?,
     showChannelAvatar: Boolean = true,
+    reason: String? = null,
 ) {
     Column(
         Modifier
@@ -220,11 +221,14 @@ fun VideoCard(
                         viewsText(video.views),
                         video.uploaded,
                     ),
-                    color = VColors.Secondary,
+                    color = VColors.Muted,
                     fontSize = 12.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (reason != null) {
+                    Text(reason, color = VColors.Coral, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
             VideoMenu(video, onChannel)
         }

@@ -291,6 +291,14 @@ fun VideoScreen(
     // Deslizar el video hacia abajo lo minimiza (sigue sonando en miniatura abajo)
     val dragScope = androidx.compose.runtime.rememberCoroutineScope()
     val dragY = remember { androidx.compose.animation.core.Animatable(0f) }
+    // Modo ambiente: el fondo toma un brillo suave del color de la miniatura del video
+    val ambientTarget by androidx.compose.runtime.produceState(Color.Transparent, state.video.thumbnail) {
+        value = ambientColorOf(context, state.video.thumbnail) ?: Color.Transparent
+    }
+    val ambient by androidx.compose.animation.animateColorAsState(
+        ambientTarget, androidx.compose.animation.core.tween(700), label = "ambiente",
+    )
+    val ambientAlpha = if (lightTheme.value) 0.16f else 0.34f
     Column(
         Modifier
             .fillMaxSize()
@@ -302,6 +310,12 @@ fun VideoScreen(
                 scaleY = 1f - f * 0.15f
             }
             .background(VColors.Background)
+            .background(
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    0f to ambient.copy(alpha = ambient.alpha * ambientAlpha),
+                    0.55f to Color.Transparent,
+                )
+            )
             .statusBarsPadding()
     ) {
         Box(
@@ -833,10 +847,19 @@ private fun Stat(value: String, label: String) {
 fun MiniPlayer(state: NowPlaying.State) {
     val context = LocalContext.current
     val ui = rememberPlayerUiState()
-    Column(Modifier.fillMaxWidth().background(VColors.Surface)) {
+    // Mini reproductor en tarjeta, acoplado sobre la barra inferior
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(VColors.NavBar)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+            .background(VColors.Raise)
+            .border(1.dp, VColors.Divider, androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+    ) {
         LinearProgressIndicator(
             progress = { ui.progress },
-            color = VColors.Red,
+            color = VColors.Coral,
             trackColor = Color.Transparent,
             modifier = Modifier.fillMaxWidth().height(2.dp),
         )
@@ -847,7 +870,10 @@ fun MiniPlayer(state: NowPlaying.State) {
                 .clickable { NowPlaying.expand() },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.width(103.dp).height(58.dp).background(Color.Black)) {
+            Box(
+                Modifier.padding(start = 6.dp).width(92.dp).height(52.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).background(Color.Black)
+            ) {
                 PlayerSurface(Modifier.fillMaxSize(), useController = false)
             }
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
@@ -881,4 +907,33 @@ fun MiniPlayer(state: NowPlaying.State) {
             }
         }
     }
+}
+
+
+/**
+ * Color "ambiente" de un video: promedio de la miniatura (en pequeño), con el brillo y la
+ * saturación ajustados para que se vea como una luz suave y no como una mancha.
+ */
+private suspend fun ambientColorOf(context: Context, url: String?): Color? {
+    if (url.isNullOrBlank()) return null
+    return runCatching {
+        val request = coil.request.ImageRequest.Builder(context)
+            .data(url)
+            .size(24)
+            .allowHardware(false)
+            .build()
+        val result = coil.Coil.imageLoader(context).execute(request) as? coil.request.SuccessResult ?: return null
+        val bmp = (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap ?: return null
+        var r = 0L; var g = 0L; var b = 0L; var n = 0L
+        for (y in 0 until bmp.height) for (x in 0 until bmp.width) {
+            val c = bmp.getPixel(x, y)
+            r += android.graphics.Color.red(c); g += android.graphics.Color.green(c); b += android.graphics.Color.blue(c); n++
+        }
+        if (n == 0L) return null
+        val hsv = FloatArray(3)
+        android.graphics.Color.RGBToHSV((r / n).toInt(), (g / n).toInt(), (b / n).toInt(), hsv)
+        hsv[1] = (hsv[1] * 1.3f).coerceIn(0.25f, 0.8f)
+        hsv[2] = 0.75f
+        Color(android.graphics.Color.HSVToColor(hsv))
+    }.getOrNull()
 }

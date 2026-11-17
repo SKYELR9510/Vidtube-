@@ -126,7 +126,6 @@ val navTabs = listOf(
     NavTab("home", "Inicio", Icons.Filled.Home, Icons.Outlined.Home),
     NavTab("shorts", "Shorts", Icons.Filled.Bolt, Icons.Outlined.Bolt),
     NavTab("search", "Explorar", Icons.Filled.Explore, Icons.Outlined.Explore),
-    NavTab("subs", "Suscripciones", Icons.Filled.Subscriptions, Icons.Outlined.Subscriptions),
     NavTab("library", "Biblioteca", Icons.Filled.Bookmark, Icons.Outlined.BookmarkBorder),
 )
 

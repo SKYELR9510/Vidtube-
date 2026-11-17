@@ -125,7 +125,8 @@ data class ChannelItem(
 sealed interface FeedEntry {
     val key: String
 
-    data class Video(val video: VideoItem) : FeedEntry {
+    /** [reason]: por qué se recomienda ("Porque buscas…", "De tus suscripciones"), si se sabe. */
+    data class Video(val video: VideoItem, val reason: String? = null) : FeedEntry {
         override val key get() = "v:" + video.url
     }
 

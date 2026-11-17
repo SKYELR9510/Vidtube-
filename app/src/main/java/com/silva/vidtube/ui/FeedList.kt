@@ -41,6 +41,7 @@ fun FeedList(
                     onClick = { onVideo(entry.video) },
                     onChannel = onChannel,
                     showChannelAvatar = showChannelAvatar,
+                    reason = entry.reason,
                 )
                 is FeedEntry.Channel -> ChannelEntry(entry.channel, onChannel)
             }

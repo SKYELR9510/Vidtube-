@@ -21,20 +21,21 @@ shot 01-inicio
 swipe_up; shot 02-inicio-secciones
 swipe_up; shot 03-descubre
 swipe_up; shot 04-recomendado
-tap Explorar last 540 $BAR; sleep 5; shot 05-explorar
+tap Explorar last 675 $BAR; sleep 5; shot 05-explorar
 tap Películas first 148 300; sleep 15; shot 06-peliculas
 swipe_up; shot 06b-peliculas-lista
 A shell input keyevent KEYCODE_BACK; sleep 2
-tap Explorar last 540 $BAR; sleep 4
+tap Explorar last 675 $BAR; sleep 4
 tap Deportes first 810 470; sleep 12; shot 06c-deportes
 A shell input keyevent KEYCODE_BACK; sleep 2
-tap Inicio last 108 $BAR; sleep 4
+tap Inicio last 135 $BAR; sleep 4
 A shell input tap 540 1500; sleep 20; shot 07-video
 A shell input keyevent KEYCODE_BACK; sleep 3
-tap Shorts last 324 $BAR; sleep 18; shot 08-shorts
-tap Suscripciones last 756 $BAR; sleep 6; shot 09-suscripciones
-tap Biblioteca last 972 $BAR; sleep 5; shot 10-biblioteca
-tap Inicio last 108 $BAR; sleep 4
+tap Shorts last 405 $BAR; sleep 18; shot 08-shorts
+tap Biblioteca last 945 $BAR; sleep 5; shot 10-biblioteca
+tap Suscripciones first 540 600; sleep 6; shot 09-suscripciones
+A shell input keyevent KEYCODE_BACK; sleep 2
+tap Inicio last 135 $BAR; sleep 4
 tap "Tu perfil" first 1012 140; sleep 2; shot 11-perfil
 tap "Usar tema claro" first 850 395; sleep 6; shot 12-tema-claro
 swipe_up; shot 13-claro-secciones

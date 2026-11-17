@@ -159,6 +159,8 @@ fun VidtubeRoot(isInPip: Boolean) {
                         onOpenList = { if (it == "downloads") nav.navigate("downloads") else nav.navigate("list/$it") },
                         onSearch = openSearch,
                         onSettings = openSettings,
+                        onSubs = { nav.navigate("subs") { launchSingleTop = true } },
+                        onChannel = openChannel,
                     )
                 }
                 composable("settings") {

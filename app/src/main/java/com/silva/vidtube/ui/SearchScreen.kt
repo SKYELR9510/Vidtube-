@@ -50,6 +50,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material.icons.outlined.Whatshot
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
@@ -129,52 +131,28 @@ fun SearchScreen(
     // El teclado no se abre solo: así se ven las categorías (tocar la barra para escribir)
 
     Column(Modifier.fillMaxSize().background(VColors.Background)) {
+        // Cabecera: título de la sección o lo que se buscó
         Row(
-            Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .height(56.dp)
-                .padding(end = 12.dp),
+            Modifier.fillMaxWidth().statusBarsPadding().height(56.dp).padding(end = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = VColors.Text)
-            }
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(VColors.Chip)
-                    .padding(start = 16.dp, end = 4.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                if (vm.text.isEmpty()) {
-                    Text("Buscar en Vidtube", color = VColors.Secondary, fontSize = 16.sp)
+            if (vm.submitted != null) {
+                IconButton(onClick = { vm.onTextChange("") }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver a Explorar", tint = VColors.Text)
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    BasicTextField(
-                        value = vm.text,
-                        onValueChange = vm::onTextChange,
-                        singleLine = true,
-                        textStyle = TextStyle(color = VColors.Text, fontSize = 16.sp),
-                        cursorBrush = SolidColor(VColors.Red),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            keyboard?.hide()
-                            vm.submit()
-                        }),
-                        modifier = Modifier.weight(1f).focusRequester(focus),
-                    )
-                    if (vm.text.isNotEmpty()) {
-                        IconButton(onClick = { vm.onTextChange("") }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Filled.Close, "Borrar", tint = VColors.Text, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
+            } else {
+                Spacer(Modifier.width(16.dp))
             }
+            Text(
+                vm.submitted ?: "Explorar",
+                color = VColors.Text,
+                fontSize = if (vm.submitted != null) 18.sp else 24.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-
+        Box(Modifier.weight(1f)) {
         val results = vm.results
         if (vm.submitted != null && results != null) {
             FeedList(
@@ -240,6 +218,54 @@ fun SearchScreen(
                 }
             }
         }
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Buscador abajo, al alcance del pulgar
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(VColors.Raise)
+                    .border(1.dp, VColors.Divider, RoundedCornerShape(50))
+                    .padding(start = 16.dp, end = 4.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (vm.text.isEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Search, null, tint = VColors.Secondary, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text("Buscar videos, canales, música…", color = VColors.Secondary, fontSize = 15.sp)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BasicTextField(
+                        value = vm.text,
+                        onValueChange = vm::onTextChange,
+                        singleLine = true,
+                        textStyle = TextStyle(color = VColors.Text, fontSize = 16.sp),
+                        cursorBrush = SolidColor(VColors.Red),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            keyboard?.hide()
+                            vm.submit()
+                        }),
+                        modifier = Modifier.weight(1f).focusRequester(focus),
+                    )
+                    if (vm.text.isNotEmpty()) {
+                        IconButton(onClick = { vm.onTextChange("") }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Filled.Close, "Borrar", tint = VColors.Text, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -270,32 +296,29 @@ private val searchCategories = listOf(
 
 @Composable
 private fun CategoryTile(cat: SearchCategory, modifier: Modifier, onClick: () -> Unit) {
-    Box(
+    // Tarjeta grafito con el color de la categoría solo en el ícono (sin degradados)
+    Row(
         modifier
-            .height(84.dp)
+            .height(64.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(
-                // Tono suave de la categoría sobre grafito (sin degradados intensos)
-                androidx.compose.ui.graphics.Brush.linearGradient(
-                    listOf(androidx.compose.ui.graphics.Color(cat.from).copy(alpha = 0.55f), VColors.Surface)
-                )
-            )
+            .background(VColors.Surface)
+            .border(1.dp, VColors.Divider, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(10.dp),
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            cat.icon, null,
-            tint = androidx.compose.ui.graphics.Color.White,
-            modifier = Modifier.align(Alignment.TopEnd).size(30.dp),
-        )
+        Icon(cat.icon, null, tint = androidx.compose.ui.graphics.Color(cat.from).copy(alpha = 1f).let { c ->
+            // aclarar un poco los tonos oscuros para que se vean sobre grafito
+            androidx.compose.ui.graphics.lerp(c, androidx.compose.ui.graphics.Color.White, 0.35f)
+        }, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(8.dp))
         Text(
             cat.label,
-            color = androidx.compose.ui.graphics.Color.White,
+            color = VColors.Text,
             fontSize = 13.sp,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
             lineHeight = 15.sp,
             maxLines = 2,
-            modifier = Modifier.align(Alignment.BottomStart),
         )
     }
 }

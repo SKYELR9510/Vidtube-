@@ -73,6 +73,8 @@ fun LibraryScreen(
     onOpenList: (String) -> Unit,
     onSearch: () -> Unit,
     onSettings: () -> Unit,
+    onSubs: () -> Unit = {},
+    onChannel: (String) -> Unit = {},
 ) {
     val history by Library.history.collectAsState()
     val later by Library.watchLater.collectAsState()
@@ -95,6 +97,32 @@ fun LibraryScreen(
                 fontSize = 13.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
+            // Suscripciones ahora vive aquí (la barra inferior tiene 4 pestañas)
+            SectionHeader("Suscripciones", if (subs.isNotEmpty()) onSubs else null)
+            if (subs.isEmpty()) {
+                Text(
+                    "Entra a un canal y toca Suscribirse para verlo aquí.",
+                    color = VColors.Secondary,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            } else {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    items(subs.take(30), key = { it.url }) { c ->
+                        Column(
+                            Modifier.width(64.dp).clickable(onClickLabel = "Abrir canal") { onChannel(c.url) },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Avatar(c.avatar, c.name, 56.dp)
+                            Spacer(Modifier.height(6.dp))
+                            Text(c.name, color = VColors.Secondary, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
             SectionHeader("Historial", if (history.isNotEmpty()) ({ onOpenList("history") }) else null)
             if (history.isEmpty()) {
                 Text(

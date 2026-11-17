@@ -34,21 +34,22 @@ object VColors {
     private val light get() = lightTheme.value
 
     // Identidad "Coral Eléctrico": fondo azul-noche, superficies grafito y coral solo como acento
-    val Background get() = if (light) Color(0xFFF6F7FA) else Color(0xFF090B12)
-    val Surface get() = if (light) Color(0xFFFFFFFF) else Color(0xFF171B25)
-    val Card get() = if (light) Color(0xFFFFFFFF) else Color(0xFF131722)
-    val Raise get() = if (light) Color(0xFFFFFFFF) else Color(0xFF1C2130)
-    /** Barra inferior y superficies de navegación (grafito oscuro). */
-    val NavBar get() = if (light) Color(0xFFFFFFFF) else Color(0xFF10131B)
-    val Chip get() = if (light) Color(0xFFECEEF2) else Color(0xFF171B25)
+    // "Ambiente": interfaz neutra casi negra; el color lo ponen las miniaturas y el acento
+    val Background get() = if (light) Color(0xFFF6F7FA) else Color(0xFF0B0C10)
+    val Surface get() = if (light) Color(0xFFFFFFFF) else Color(0xFF15171D)
+    val Card get() = if (light) Color(0xFFFFFFFF) else Color(0xFF15171D)
+    val Raise get() = if (light) Color(0xFFFFFFFF) else Color(0xFF181A21)
+    /** Barra inferior y mini reproductor. */
+    val NavBar get() = if (light) Color(0xFFFFFFFF) else Color(0xFF101217)
+    val Chip get() = if (light) Color(0xFFECEEF2) else Color(0xFF15171D)
     val ChipSelected get() = Coral
-    val Text get() = if (light) Color(0xFF12141B) else Color(0xFFF5F6FA)
-    val Secondary get() = if (light) Color(0xFF555B66) else Color(0xFFA6ADBA)
-    val Muted get() = if (light) Color(0xFF6E7480) else Color(0xFF7F8695)
-    val Divider get() = if (light) Color(0xFFE2E4EA) else Color(0xFF292D38)
-    val Silver get() = Color(0xFFA6ADBA)
+    val Text get() = if (light) Color(0xFF12141B) else Color(0xFFF3F4F7)
+    val Secondary get() = if (light) Color(0xFF555B66) else Color(0xFFB4B9C4)
+    val Muted get() = if (light) Color(0xFF6E7480) else Color(0xFF9AA0AC)
+    val Divider get() = if (light) Color(0xFFE2E4EA) else Color(0xFF262A33)
+    val Silver get() = Color(0xFFB4B9C4)
     /** Velo oscuro para leer texto sobre miniaturas. */
-    val Scrim = Color(0xFF090B12)
+    val Scrim = Color(0xFF0B0C10)
 
     val Coral = Color(0xFFFF405B)
     val Coral2 = Color(0xFFFF875E)
