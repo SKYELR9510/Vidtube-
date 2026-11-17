@@ -170,7 +170,7 @@ fun SearchScreen(
             LazyColumn(Modifier.fillMaxSize()) {
                 if (vm.text.isBlank()) {
                     item("cat_title") { SectionTitle("Explorar categorías") }
-                    items(searchCategories.chunked(3), key = { "cat_" + it.first().label }) { row ->
+                    items(searchCategories.chunked(2), key = { "cat_" + it.first().label }) { row ->
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),

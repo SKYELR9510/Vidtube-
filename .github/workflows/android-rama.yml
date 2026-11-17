@@ -47,7 +47,7 @@ jobs:
           ./gradlew testReleaseUnitTest assembleRelease --stacktrace
           CODE=$((100 + VIDTUBE_BUILD))
           mkdir -p out
-          cp app/build/outputs/apk/release/app-release.apk "out/Vidtube-$CODE-coral.apk"
+          cp app/build/outputs/apk/release/app-release.apk "out/Vidtube-$CODE-prueba.apk"
       - name: Revisión de Android (lint)
         continue-on-error: true
         run: ./gradlew lintRelease
@@ -69,7 +69,7 @@ jobs:
           gh release upload "$TAG" out/*.apk out/firma.txt --clobber
       - uses: actions/upload-artifact@v4
         with:
-          name: Vidtube-${{ steps.v.outputs.code }}-coral-apk
+          name: Vidtube-${{ steps.v.outputs.code }}-prueba-apk
           path: |
             out/*.apk
             out/firma.txt
@@ -90,7 +90,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
-          name: Vidtube-${{ needs.build.outputs.code }}-coral-apk
+          name: Vidtube-${{ needs.build.outputs.code }}-prueba-apk
           path: apk
       - run: cp apk/*.apk app.apk
       - name: Habilitar KVM
