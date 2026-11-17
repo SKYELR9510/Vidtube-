@@ -285,34 +285,54 @@ object PlayerHolder {
             throw IllegalStateException("Esta transmisión en vivo no se puede reproducir")
         }
 
-        val video = if (sourceMode >= 2) null else pickVideoOnly(info.videoOnlyStreams, quality)
-        val audio = pickAudio(info.audioStreams)
+        // Se prueban los formatos en orden; si uno falla al armarse (p. ej. el manifiesto
+        // de un video "OTF" que YouTube rechaza), se pasa al siguiente en vez de rendirse.
+        var firstError: Exception? = null
+        fun attempt(build: () -> MediaSource?): MediaSource? = try {
+            build()
+        } catch (e: Exception) {
+            Log.w(TAG, "Formato descartado, pruebo el siguiente", e)
+            if (firstError == null) firstError = e
+            null
+        }
 
-        if (video != null && audio != null) {
-            return MergingMediaSource(
-                true,
-                youtubeSource(video, info),
-                youtubeSource(audio, info),
-            )
+        val audio = pickAudio(info.audioStreams)
+        if (sourceMode < 2 && audio != null) {
+            // Primero formatos de descarga directa, después los OTF (más frágiles)
+            val candidates = listOfNotNull(
+                pickVideoOnly(info.videoOnlyStreams.filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }, quality),
+                pickVideoOnly(info.videoOnlyStreams, quality),
+            ).distinct()
+            for (video in candidates) {
+                attempt {
+                    MergingMediaSource(true, youtubeSource(video, info), youtubeSource(audio, info))
+                }?.let { return it }
+            }
         }
 
         // Respaldo: video con audio incluido (normalmente 360p)
         val muxed = info.videoStreams
             .filter { it.isUrl && it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP }
             .sortedByDescending { it.height }
-            .firstOrNull { it.height <= quality }
-            ?: info.videoStreams.firstOrNull()
-        if (muxed != null) return youtubeSource(muxed, info)
+            .let { list -> list.firstOrNull { it.height <= quality } ?: list.lastOrNull() }
+        if (muxed != null) attempt { youtubeSource(muxed, info) }?.let { return it }
 
-        if (audio != null) return youtubeSource(audio, info)
-
-        if (sourceMode >= 2 && info.hlsUrl.isEmpty()) {
-            val v = pickVideoOnly(info.videoOnlyStreams, quality)
-            if (v != null) return youtubeSource(v, info)
-        }
         if (info.hlsUrl.isNotEmpty()) {
-            return HlsMediaSource.Factory(ytHls).createMediaSource(MediaItem.fromUri(info.hlsUrl))
+            attempt { HlsMediaSource.Factory(ytHls).createMediaSource(MediaItem.fromUri(info.hlsUrl)) }
+                ?.let { return it }
         }
+        if (info.dashMpdUrl.isNotEmpty()) {
+            attempt {
+                DashMediaSource.Factory(DefaultDashChunkSource.Factory(ytDash), ytDash)
+                    .createMediaSource(MediaItem.fromUri(info.dashMpdUrl))
+            }?.let { return it }
+        }
+        for (other in info.videoStreams.filter { it != muxed }) {
+            attempt { youtubeSource(other, info) }?.let { return it }
+        }
+        if (audio != null) attempt { youtubeSource(audio, info) }?.let { return it }
+
+        firstError?.let { throw it }
         throw IllegalStateException("No se encontró un formato reproducible para este video")
     }
 

@@ -33,7 +33,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PictureInPicture
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.ThumbUp
@@ -83,11 +82,8 @@ fun LibraryScreen(
 
     Column(Modifier.fillMaxSize().background(VColors.Background)) {
         VTopBar(leading = {
-            Icon(Icons.Filled.Bookmark, null, tint = VColors.Red, modifier = Modifier.size(26.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Biblioteca", color = VColors.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("Biblioteca", color = VColors.Text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }) {
-            TopIcon(Icons.Outlined.Search, "Buscar", onSearch)
             TopIcon(Icons.Outlined.Settings, "Configuración", onSettings)
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -123,7 +119,7 @@ fun LibraryScreen(
                     }
                 }
             }
-            SectionHeader("Historial", if (history.isNotEmpty()) ({ onOpenList("history") }) else null)
+            SectionHeader("Vistos hace poco", if (history.isNotEmpty()) ({ onOpenList("history") }) else null)
             if (history.isEmpty()) {
                 Text(
                     "Los videos que veas aparecerán aquí.",
@@ -176,7 +172,7 @@ private fun SectionHeader(title: String, onSeeAll: (() -> Unit)?) {
     ) {
         Text(title, color = VColors.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         if (onSeeAll != null) {
-            TextButton(onClick = onSeeAll) { Text("Ver todo", color = VColors.Text) }
+            TextButton(onClick = onSeeAll) { Text("Ver todo", color = VColors.Coral2, fontWeight = FontWeight.SemiBold) }
         }
     }
 }

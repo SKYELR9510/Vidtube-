@@ -346,9 +346,11 @@ fun ProfileButton(onLibrary: () -> Unit, onSettings: () -> Unit) {
     val settings by Library.settings.collectAsState()
     Box(Modifier.padding(horizontal = 6.dp)) {
         Box(
-            Modifier.size(36.dp).clip(CircleShape).background(VColors.Coral).clickable(onClickLabel = "Abrir perfil") { open = true },
+            Modifier.size(38.dp).clip(CircleShape).background(VColors.Raise)
+                .border(1.dp, VColors.Divider, CircleShape)
+                .clickable(onClickLabel = "Abrir perfil") { open = true },
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.Person, "Tu perfil", tint = Color.White, modifier = Modifier.size(22.dp)) }
+        ) { Icon(Icons.Filled.Person, "Tu perfil", tint = VColors.Text, modifier = Modifier.size(21.dp)) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = { Text("Biblioteca") },

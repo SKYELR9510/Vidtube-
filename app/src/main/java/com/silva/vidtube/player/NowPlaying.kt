@@ -337,6 +337,8 @@ object NowPlaying {
         is ReCaptchaException -> "YouTube pidió verificación (captcha). Espera unos minutos e intenta de nuevo."
         is ContentNotAvailableException -> e.message ?: "Este video no está disponible."
         is IOException -> "Sin conexión. Revisa tu internet e intenta de nuevo."
+        is org.schabi.newpipe.extractor.services.youtube.dashmanifestcreators.CreationException ->
+            "YouTube no entregó este video en un formato compatible. Toca Reintentar o prueba otra calidad."
         else -> "No se pudo reproducir este video. (${e.javaClass.simpleName})"
     }
 }
