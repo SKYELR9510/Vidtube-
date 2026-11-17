@@ -120,6 +120,7 @@ object PlayerHolder {
 
     /** Reproduce un Short: en bucle, sin servicio en segundo plano. */
     suspend fun playShort(context: Context, info: StreamInfo) {
+        Chapters.set(emptyList())
         sourceMode = 0
         lastLoadError = null
         val source = withContext(Dispatchers.IO) { buildSource(info, 720) }
@@ -142,6 +143,7 @@ object PlayerHolder {
     }
 
     suspend fun play(context: Context, info: StreamInfo, quality: Int, startMs: Long) {
+        Chapters.set(Chapters.from(info))
         sourceMode = 0
         lastLoadError = null
         val source = withContext(Dispatchers.IO) { buildSource(info, quality) }

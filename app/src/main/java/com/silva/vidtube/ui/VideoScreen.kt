@@ -554,6 +554,10 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
                 }
             }
         }
+        val chapterList = com.silva.vidtube.player.Chapters.from(info)
+        if (chapterList.isNotEmpty()) {
+            item("chapters") { ChaptersRow(chapterList, video.thumbnail) }
+        }
         item("comments") {
             CommentsTeaser(comments, commentCount) { if (!comments.isNullOrEmpty()) showComments = true }
         }
@@ -936,4 +940,58 @@ private suspend fun ambientColorOf(context: Context, url: String?): Color? {
         hsv[2] = 0.75f
         Color(android.graphics.Color.HSVToColor(hsv))
     }.getOrNull()
+}
+
+/** Fila de capítulos: tocar uno salta a ese momento. Resalta el que se está viendo. */
+@Composable
+private fun ChaptersRow(chapters: List<com.silva.vidtube.player.Chapter>, fallbackThumb: String?) {
+    val context = LocalContext.current
+    val player = remember { com.silva.vidtube.player.PlayerHolder.player(context) }
+    var pos by remember { mutableStateOf(0L) }
+    LaunchedEffect(player) {
+        while (true) { pos = player.currentPosition; kotlinx.coroutines.delay(1000) }
+    }
+    val currentStart = com.silva.vidtube.player.Chapters.at(chapters, pos)?.startMs
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp)) {
+        Text(
+            "Capítulos", color = VColors.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(chapters, key = { it.startMs }) { ch ->
+                val active = ch.startMs == currentStart
+                Column(
+                    Modifier.width(150.dp).clip(RoundedCornerShape(10.dp))
+                        .clickable(onClickLabel = "Ir a ${ch.title}") { player.seekTo(ch.startMs); pos = ch.startMs }
+                ) {
+                    coil.compose.AsyncImage(
+                        model = ch.preview ?: fallbackThumb,
+                        contentDescription = null,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(VColors.Card)
+                            .then(if (active) Modifier.border(2.dp, VColors.Coral, RoundedCornerShape(10.dp)) else Modifier),
+                    )
+                    Text(
+                        "${chapterClock(ch.startMs)} · ${ch.title}",
+                        color = if (active) VColors.Text else VColors.Secondary,
+                        fontSize = 12.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun chapterClock(ms: Long): String {
+    val t = ms / 1000
+    val h = t / 3600; val m = (t % 3600) / 60; val sec = t % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
 }

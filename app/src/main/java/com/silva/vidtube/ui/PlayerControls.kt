@@ -10,7 +10,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -75,6 +74,14 @@ import androidx.compose.ui.unit.sp
 import com.google.android.exoplayer2.Player
 import com.silva.vidtube.player.PlayerHolder
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.material.icons.outlined.BrightnessMedium
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.geometry.Size
+import com.silva.vidtube.player.Chapters
 
 /**
  * Controles del reproductor: botones de cristal flotantes, ±10 s, barra de progreso neón,
@@ -115,6 +122,42 @@ fun PlayerControls(
     val subsOn by PlayerHolder.subtitlesOn.collectAsState()
     val subsLang by PlayerHolder.subtitleLanguage.collectAsState()
     val zoomCb by rememberUpdatedState(onZoom)
+    val chapters by Chapters.current.collectAsState()
+    // Posición que se está eligiendo al arrastrar la barra (para mostrar su capítulo)
+    var previewMs by remember { mutableStateOf<Long?>(null) }
+    // Indicador de brillo/volumen: (true = brillo, false = volumen) y nivel 0..1
+    var hud by remember { mutableStateOf<Pair<Boolean, Float>?>(null) }
+    LaunchedEffect(hud) { if (hud != null) { delay(900); hud = null } }
+    val activity = remember(context) { context.findActivity() }
+    val audio = remember(context) { context.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager }
+    // Al salir de pantalla completa, el brillo vuelve al del sistema
+    DisposableEffect(fullscreen) {
+        onDispose {
+            if (fullscreen) activity?.window?.let { w ->
+                w.attributes = w.attributes.apply { screenBrightness = -1f }
+            }
+        }
+    }
+    fun currentBrightness(): Float {
+        val b = activity?.window?.attributes?.screenBrightness ?: -1f
+        if (b >= 0f) return b
+        return runCatching {
+            android.provider.Settings.System.getInt(context.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS) / 255f
+        }.getOrDefault(0.5f).coerceIn(0f, 1f)
+    }
+    fun setBrightness(v: Float) {
+        activity?.window?.let { w -> w.attributes = w.attributes.apply { screenBrightness = v.coerceIn(0.01f, 1f) } }
+    }
+    fun currentVolume(): Float {
+        val am = audio ?: return 0f
+        val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        return am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC).toFloat() / max
+    }
+    fun setVolume(v: Float) {
+        val am = audio ?: return
+        val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+        runCatching { am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, Math.round(v.coerceIn(0f, 1f) * max), 0) }
+    }
 
     fun poke() { touchedAt = System.currentTimeMillis() }
 
@@ -151,12 +194,42 @@ fun PlayerControls(
             }
             .pointerInput(fullscreen) {
                 if (!fullscreen) return@pointerInput
-                // Pellizcar: abrir = llenar pantalla, cerrar = ajustar
-                var scale = 1f
-                detectTransformGestures { _, _, z, _ ->
-                    scale *= z
-                    if (scale > 1.12f) { zoomCb?.invoke(true); scale = 1f }
-                    else if (scale < 0.88f) { zoomCb?.invoke(false); scale = 1f }
+                // Un dedo deslizando vertical: izquierda = brillo, derecha = volumen.
+                // Dos dedos: pellizcar para llenar la pantalla o ajustar.
+                val slop = viewConfiguration.touchSlop * 1.5f
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val left = down.position.x < size.width / 2f
+                    var mode = 0 // 0 sin decidir, 1 brillo/volumen, 2 pellizco
+                    var scale = 1f
+                    var start = 0f
+                    do {
+                        val ev = awaitPointerEvent()
+                        val pressed = ev.changes.filter { it.pressed }
+                        if (pressed.size >= 2 && mode != 1) {
+                            mode = 2
+                            scale *= ev.calculateZoom()
+                            if (scale > 1.12f) { zoomCb?.invoke(true); scale = 1f }
+                            else if (scale < 0.88f) { zoomCb?.invoke(false); scale = 1f }
+                            ev.changes.forEach { it.consume() }
+                        } else if (pressed.size == 1 && mode != 2) {
+                            val c = pressed[0]
+                            val dx = c.position.x - down.position.x
+                            val dy = c.position.y - down.position.y
+                            // Se evita la franja de arriba y abajo (barra del sistema y barra de progreso)
+                            val inZone = down.position.y > size.height * 0.12f && down.position.y < size.height * 0.80f
+                            if (mode == 0 && inZone && kotlin.math.abs(dy) > slop && kotlin.math.abs(dy) > kotlin.math.abs(dx) * 1.3f) {
+                                mode = 1
+                                start = if (left) currentBrightness() else currentVolume()
+                            }
+                            if (mode == 1) {
+                                val v = (start - dy / (size.height * 0.75f)).coerceIn(0f, 1f)
+                                if (left) setBrightness(v) else setVolume(v)
+                                hud = left to v
+                                c.consume()
+                            }
+                        }
+                    } while (ev.changes.any { it.pressed })
                 }
             }
     ) {
@@ -174,6 +247,9 @@ fun PlayerControls(
                     .background(Color(0x66090B12))
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             )
+        }
+        hud?.let { (isBrightness, level) ->
+            GestureHud(isBrightness, level, Modifier.align(if (isBrightness) Alignment.CenterStart else Alignment.CenterEnd))
         }
         if (buffering && !visible) {
             CircularProgressIndicator(
@@ -310,10 +386,19 @@ fun PlayerControls(
                         .padding(horizontal = if (fullscreen) 22.dp else 10.dp, vertical = if (compact) 4.dp else if (fullscreen) 12.dp else 0.dp)
                 ) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        val shownMs = previewMs ?: position
                         Text(
-                            "${clock(position)} / ${clock(duration)}",
+                            "${clock(shownMs)} / ${clock(duration)}",
                             color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium,
                         )
+                        Chapters.at(chapters, shownMs)?.let { ch ->
+                            Text(
+                                "  ·  ${ch.title}",
+                                color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                        }
                         Spacer(Modifier.weight(1f))
                         if (qualityLabel != null) {
                             Text(
@@ -327,7 +412,11 @@ fun PlayerControls(
                             IconCircle(Icons.Outlined.Fullscreen, "Pantalla completa", size = 34.dp) { onFullscreen() }
                         }
                     }
-                    NeonSeekBar(position, buffered, duration, thick = fullscreen) { ms ->
+                    NeonSeekBar(
+                        position, buffered, duration, thick = fullscreen,
+                        marks = chapters.map { it.startMs },
+                        onPreview = { previewMs = it; if (it != null) poke() },
+                    ) { ms ->
                         player.seekTo(ms); poke()
                     }
                     if (fullscreen && (actions != null || next != null)) {
@@ -361,7 +450,17 @@ fun PlayerControls(
 
 /** Barra de progreso roja con brillo; se toca o arrastra para adelantar. */
 @Composable
-fun NeonSeekBar(position: Long, buffered: Long, duration: Long, thick: Boolean, onSeek: (Long) -> Unit) {
+fun NeonSeekBar(
+    position: Long,
+    buffered: Long,
+    duration: Long,
+    thick: Boolean,
+    /** Inicio de cada capítulo (ms): la barra se corta en segmentos. */
+    marks: List<Long> = emptyList(),
+    /** Posición que se está eligiendo al arrastrar, o null al soltar. */
+    onPreview: (Long?) -> Unit = {},
+    onSeek: (Long) -> Unit,
+) {
     var dragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
     var width by remember { mutableFloatStateOf(1f) }
@@ -385,13 +484,20 @@ fun NeonSeekBar(position: Long, buffered: Long, duration: Long, thick: Boolean, 
                 val inset = 8.dp.toPx()
                 fun frac(x: Float) = ((x - inset) / (width - 2 * inset)).coerceIn(0f, 1f)
                 detectHorizontalDragGestures(
-                    onDragStart = { off -> dragging = true; dragFraction = frac(off.x) },
+                    onDragStart = { off ->
+                        dragging = true; dragFraction = frac(off.x)
+                        if (duration > 0) onPreview((duration * dragFraction).toLong())
+                    },
                     onDragEnd = {
                         if (duration > 0) onSeek((duration * dragFraction).toLong())
                         dragging = false
+                        onPreview(null)
                     },
-                    onDragCancel = { dragging = false },
-                    onHorizontalDrag = { change, _ -> dragFraction = frac(change.position.x) },
+                    onDragCancel = { dragging = false; onPreview(null) },
+                    onHorizontalDrag = { change, _ ->
+                        dragFraction = frac(change.position.x)
+                        if (duration > 0) onPreview((duration * dragFraction).toLong())
+                    },
                 )
             },
         contentAlignment = Alignment.Center,
@@ -405,6 +511,15 @@ fun NeonSeekBar(position: Long, buffered: Long, duration: Long, thick: Boolean, 
             if (end > 0f) {
                 // Progreso coral sólido (sin brillo de neón)
                 drawLine(VColors.Coral, Offset(0f, y), Offset(end, y), stroke, StrokeCap.Round)
+            }
+            // Cortes entre capítulos
+            if (duration > 0 && marks.isNotEmpty()) {
+                val gap = 2.dp.toPx()
+                for (m in marks) {
+                    if (m <= 0 || m >= duration) continue
+                    val x = size.width * (m.toFloat() / duration)
+                    drawRect(Color(0xE6000000), Offset(x - gap / 2, y - stroke / 2 - 1f), Size(gap, stroke + 2f))
+                }
             }
             val r = (if (dragging) 8.dp else 6.dp).toPx()
             if (dragging) drawCircle(VColors.Coral.copy(alpha = 0.25f), r * 1.8f, Offset(end, y))
@@ -531,5 +646,30 @@ fun GlassPill(icon: ImageVector, text: String?, tint: Color = Color.White, onCli
             Spacer(Modifier.width(10.dp))
             Text(text, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
         }
+    }
+}
+
+/** Indicador de brillo o volumen mientras se desliza en pantalla completa. */
+@Composable
+private fun GestureHud(isBrightness: Boolean, level: Float, modifier: Modifier) {
+    Row(
+        modifier
+            .padding(horizontal = 48.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color(0xB3090B12))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (isBrightness) Icons.Outlined.BrightnessMedium else Icons.AutoMirrored.Outlined.VolumeUp,
+            if (isBrightness) "Brillo" else "Volumen",
+            tint = Color.White, modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.width(110.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color(0x40FFFFFF))) {
+            Box(Modifier.fillMaxWidth(level.coerceIn(0f, 1f)).height(4.dp).background(VColors.Coral))
+        }
+        Spacer(Modifier.width(10.dp))
+        Text("${Math.round(level * 100)} %", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }
