@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -51,10 +51,22 @@ jobs:
       - name: Revisión de Android (lint)
         continue-on-error: true
         run: ./gradlew lintRelease
+      - name: Resultados de pruebas y lint
+        if: always()
+        run: |
+          for f in app/build/test-results/testReleaseUnitTest/*.xml; do grep -o '<testsuite name="[^"]*" tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' "$f"; done
+          grep -E "Error:|errors," app/build/reports/lint-results.txt || true
       - name: Firma de la APK
         run: |
           APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | tail -1)
           $APKSIGNER verify --print-certs out/*.apk | tee out/firma.txt
+      - name: APK de prueba descargable (versión previa, no se ofrece como actualización)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="android-${GITHUB_REF_NAME//\//-}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --target "$GITHUB_SHA" --title "Vidtube Android · rama $GITHUB_REF_NAME (prueba)" --notes "APK de prueba de la rama $GITHUB_REF_NAME. No es la versión oficial; firmada con la clave oficial de Vidtube."
+          gh release upload "$TAG" out/*.apk out/firma.txt --clobber
       - uses: actions/upload-artifact@v4
         with:
           name: Vidtube-${{ steps.v.outputs.code }}-coral-apk
@@ -103,3 +115,11 @@ jobs:
         with:
           name: capturas-emulador
           path: shots/
+      - name: Capturas en una versión previa (para verlas sin descargar el artefacto)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="android-${GITHUB_REF_NAME//\//-}"
+          find shots -size 0 -delete
+          gh release upload "$TAG" shots/*.png --clobber || true

@@ -655,38 +655,38 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
 @Composable
 private fun QualitySheet(state: NowPlaying.State) {
     val context = LocalContext.current
-        ModalBottomSheet(
-            onDismissRequest = { qualitySheet.value = false },
-            containerColor = VColors.Surface,
-        ) {
-            Column(Modifier.padding(bottom = 24.dp)) {
-                Text(
-                    "Calidad del video",
-                    color = VColors.Text,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                )
-                state.qualities.forEach { q ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                NowPlaying.setQuality(context, q)
-                                qualitySheet.value = false
-                            }
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                    ) {
-                        Text(
-                            "${q}p" + if (q == state.quality) "  ✓" else "",
-                            color = if (q == state.quality) VColors.Red else VColors.Text,
-                            fontSize = 15.sp,
-                        )
-                    }
+    ModalBottomSheet(
+        onDismissRequest = { qualitySheet.value = false },
+        containerColor = VColors.Surface,
+    ) {
+        Column(Modifier.padding(bottom = 24.dp)) {
+            Text(
+                "Calidad del video",
+                color = VColors.Text,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            )
+            state.qualities.forEach { q ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            NowPlaying.setQuality(context, q)
+                            qualitySheet.value = false
+                        }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                ) {
+                    Text(
+                        "${q}p" + if (q == state.quality) "  ✓" else "",
+                        color = if (q == state.quality) VColors.Red else VColors.Text,
+                        fontSize = 15.sp,
+                    )
                 }
             }
         }
     }
+}
 
 private fun compactSubs(n: Long) = if (n < 0) "" else compactNumber(n) + " suscriptores"
 

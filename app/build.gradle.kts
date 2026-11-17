@@ -65,6 +65,12 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    lint {
+        // Informe en texto para verlo en el registro de GitHub Actions
+        textReport = true
+        textOutput = file("build/reports/lint-results.txt")
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
