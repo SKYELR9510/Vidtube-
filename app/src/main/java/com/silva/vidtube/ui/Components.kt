@@ -145,7 +145,7 @@ fun Thumbnail(video: VideoItem, modifier: Modifier = Modifier, rounded: Dp = 0.d
                     .align(Alignment.BottomEnd)
                     .padding(end = 6.dp, bottom = if (progress != null) 9.dp else 6.dp)
                     .clip(RoundedCornerShape(5.dp))
-                    .background(if (video.isLive) VColors.Red else Color(0xD108090B))
+                    .background(if (video.isLive) VColors.Coral else Color(0xD1090B12))
                     .padding(horizontal = 5.dp, vertical = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -156,10 +156,10 @@ fun Thumbnail(video: VideoItem, modifier: Modifier = Modifier, rounded: Dp = 0.d
                 Text(badge, color = Color.White, fontSize = if (smallBadge) 11.sp else 12.sp, fontWeight = FontWeight.Bold)
             }
         }
-        // Barra roja con lo que ya viste del video
+        // Barra coral con lo que ya viste del video
         if (progress != null) {
             Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(Color(0x55FFFFFF))) {
-                Box(Modifier.fillMaxWidth(progress).height(3.dp).background(VColors.Red))
+                Box(Modifier.fillMaxWidth(progress).height(3.dp).background(VColors.Coral))
             }
         }
     }

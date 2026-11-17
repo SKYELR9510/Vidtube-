@@ -154,7 +154,7 @@ private fun Banner(
             LinearProgressIndicator(
                 progress = { progress },
                 color = VColors.Red,
-                trackColor = Color(0xFF3A3A3A),
+                trackColor = VColors.Divider,
                 modifier = Modifier.fillMaxWidth().padding(end = 10.dp).height(3.dp),
             )
         }

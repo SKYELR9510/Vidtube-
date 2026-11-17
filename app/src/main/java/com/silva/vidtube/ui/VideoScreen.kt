@@ -357,7 +357,7 @@ fun VideoScreen(
 @Composable
 private fun ErrorOverlay(message: String, onRetry: () -> Unit) {
     Box(
-        Modifier.fillMaxSize().background(Color(0xCC000000)).clickable(onClick = onRetry),
+        Modifier.fillMaxSize().background(Color(0xCC090B12)).clickable(onClick = onRetry),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -762,7 +762,7 @@ private fun CommentsList(comments: List<Comment>, count: Int) {
                             if (c.replies > 0) {
                                 Text(
                                     "   ${c.replies} respuestas",
-                                    color = Color(0xFF3EA6FF),
+                                    color = VColors.Coral2,
                                     fontSize = 12.sp,
                                 )
                             }
@@ -782,7 +782,7 @@ private fun DescriptionSheet(video: VideoItem, info: StreamInfo) {
         if (desc.type() == Description.Type.HTML) {
             AnnotatedString.fromHtml(
                 desc.content(),
-                linkStyles = TextLinkStyles(style = SpanStyle(color = Color(0xFF3EA6FF))),
+                linkStyles = TextLinkStyles(style = SpanStyle(color = VColors.Coral2)),
             )
         } else {
             AnnotatedString(desc.content())

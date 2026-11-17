@@ -182,16 +182,12 @@ private fun ChannelHeader(d: ChannelDetails, tab: Int, onTab: (Int) -> Unit) {
             )
         }
         Spacer(Modifier.height(if (d.banner != null) 14.dp else 8.dp))
-        // Foto con aro rojo brillante
+        // Foto con aro coral (sin brillo)
         Box(
             Modifier
                 .size(108.dp)
                 .clip(androidx.compose.foundation.shape.CircleShape)
-                .background(
-                    androidx.compose.ui.graphics.Brush.sweepGradient(
-                        listOf(VColors.Red, androidx.compose.ui.graphics.Color(0xFFFF7A45), VColors.RedDeep, VColors.Red)
-                    )
-                )
+                .background(VColors.Coral)
                 .padding(3.dp)
                 .clip(androidx.compose.foundation.shape.CircleShape)
                 .background(VColors.Background)
@@ -244,7 +240,7 @@ private fun ChannelHeader(d: ChannelDetails, tab: Int, onTab: (Int) -> Unit) {
                     fontWeight = if (sel) FontWeight.Bold else FontWeight.Medium,
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
-                        .then(if (sel) Modifier.background(VColors.RedGradient) else Modifier.background(VColors.Chip))
+                        .then(if (sel) Modifier.background(VColors.Coral) else Modifier.background(VColors.Chip))
                         .clickable { onTab(i) }
                         .padding(horizontal = 18.dp, vertical = 8.dp),
                 )

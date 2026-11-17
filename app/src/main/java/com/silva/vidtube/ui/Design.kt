@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -53,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,11 +85,11 @@ fun SplashScreen() {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color(0xFF050506))
+            .background(Color(0xFF090B12))
             .background(
                 Brush.radialGradient(
-                    listOf(Color(0x99C4001A), Color(0x33600010), Color.Transparent),
-                    radius = 1100f,
+                    listOf(Color(0x40FF405B), Color(0x14FF875E), Color.Transparent),
+                    radius = 1000f,
                 )
             ),
         contentAlignment = Alignment.Center,
@@ -128,10 +130,10 @@ val navTabs = listOf(
     NavTab("library", "Biblioteca", Icons.Filled.Bookmark, Icons.Outlined.BookmarkBorder),
 )
 
-/** Barra inferior: la pestaña activa se ilumina en rojo. */
+/** Barra inferior: grafito oscuro; la pestaña activa con un indicador coral compacto. */
 @Composable
 fun VBottomBar(current: String?, onSelect: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().background(VColors.Background)) {
+    Column(Modifier.fillMaxWidth().background(VColors.NavBar)) {
         HorizontalDivider(color = VColors.Divider, thickness = 0.5.dp)
         Row(
             Modifier.fillMaxWidth().navigationBarsPadding().height(62.dp),
@@ -142,7 +144,8 @@ fun VBottomBar(current: String?, onSelect: (String) -> Unit) {
                 Column(
                     Modifier
                         .weight(1f)
-                        .clickable { onSelect(tab.route) }
+                        .heightIn(min = 48.dp)
+                        .clickable(role = androidx.compose.ui.semantics.Role.Tab) { onSelect(tab.route) }
                         .padding(vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -150,22 +153,22 @@ fun VBottomBar(current: String?, onSelect: (String) -> Unit) {
                         if (sel) {
                             Box(
                                 Modifier
-                                    .size(width = 52.dp, height = 30.dp)
-                                    .clip(RoundedCornerShape(15.dp))
-                                    .background(VColors.RedGradient)
+                                    .size(width = 48.dp, height = 28.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(VColors.Coral.copy(alpha = 0.16f))
                             )
                         }
                         Icon(
                             if (sel) tab.selected else tab.normal,
                             tab.label,
-                            tint = if (sel) Color.White else VColors.Secondary,
+                            tint = if (sel) VColors.Coral else VColors.Secondary,
                             modifier = Modifier.size(25.dp),
                         )
                     }
                     Spacer(Modifier.height(2.dp))
                     Text(
                         tab.label,
-                        color = if (sel) VColors.Text else VColors.Secondary,
+                        color = if (sel) VColors.Coral else VColors.Secondary,
                         fontSize = 10.sp,
                         fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
@@ -206,9 +209,10 @@ fun HeroCard(video: VideoItem, onPlay: () -> Unit, onChannel: (String) -> Unit) 
         Modifier
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .fillMaxWidth()
-            .aspectRatio(16f / 11f)
-            .clip(RoundedCornerShape(20.dp))
-            .border(1.dp, Color(0x14BFC3CA), RoundedCornerShape(20.dp))
+            // ~20 % más bajo que antes (16:11 → 16:8.8)
+            .aspectRatio(16f / 8.8f)
+            .clip(RoundedCornerShape(18.dp))
+            .border(1.dp, VColors.Divider.copy(alpha = 0.6f), RoundedCornerShape(18.dp))
             .clickable(onClick = onPlay)
     ) {
         AsyncImage(
@@ -220,10 +224,11 @@ fun HeroCard(video: VideoItem, onPlay: () -> Unit, onChannel: (String) -> Unit) 
         )
         Box(
             Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color(0x2208090B), 0.62f to Color(0xC708090B), 1f to Color(0xF708090B))
+                // Degradado solo en la parte de abajo, donde va el texto
+                Brush.verticalGradient(0f to Color.Transparent, 0.38f to Color.Transparent, 0.7f to VColors.Scrim.copy(alpha = 0.72f), 1f to VColors.Scrim.copy(alpha = 0.94f))
             )
         )
-        Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+        Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 14.dp, vertical = 12.dp)) {
             if (video.isLive) {
                 Row(
                     Modifier.clip(RoundedCornerShape(6.dp)).background(VColors.Red).padding(horizontal = 8.dp, vertical = 3.dp),
@@ -233,36 +238,34 @@ fun HeroCard(video: VideoItem, onPlay: () -> Unit, onChannel: (String) -> Unit) 
                     Spacer(Modifier.width(5.dp))
                     Text("EN VIVO", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
                 }
-            } else {
-                Text("DESTACADO", color = VColors.Silver, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
+                Spacer(Modifier.height(6.dp))
             }
-            Spacer(Modifier.height(6.dp))
             Text(
                 video.title,
                 color = Color.White,
-                fontSize = 21.sp,
-                fontWeight = FontWeight.ExtraBold,
-                lineHeight = 25.sp,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 22.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
             Text(
                 joinDot(video.channelName, viewsText(video.views), video.uploaded, if (video.isLive) null else durationText(video.durationSec).ifEmpty { null }),
-                color = VColors.Silver,
-                fontSize = 13.sp,
+                color = Color(0xFFD4D8E0),
+                fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.clickable(enabled = video.channelUrl != null) { video.channelUrl?.let(onChannel) },
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(VColors.RedGradient)
+                        .background(VColors.Coral)
                         .clickable(onClick = onPlay)
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                        .padding(horizontal = 18.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(20.dp))
@@ -272,10 +275,10 @@ fun HeroCard(video: VideoItem, onPlay: () -> Unit, onChannel: (String) -> Unit) 
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0x33FFFFFF))
-                        .border(1.dp, Color(0x55FFFFFF), RoundedCornerShape(50))
+                        .background(Color(0x2EFFFFFF))
+                        .border(1.dp, Color(0x40FFFFFF), RoundedCornerShape(50))
                         .clickable { Library.toggleWatchLater(video) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
@@ -307,15 +310,8 @@ fun VideoShelf(
     ) {
         items(videos, key = { it.url }) { v ->
             Column(Modifier.width(if (resume) 240.dp else 220.dp).clip(RoundedCornerShape(14.dp)).clickable { onVideo(v) }) {
-                Box {
-                    Thumbnail(v, Modifier.fillMaxWidth().aspectRatio(16f / 9f), rounded = 14.dp, smallBadge = true)
-                    if (resume) {
-                        Box(
-                            Modifier.align(Alignment.Center).size(42.dp).clip(CircleShape).background(VColors.RedGradient),
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Filled.PlayArrow, "Reanudar", tint = Color.White, modifier = Modifier.size(26.dp)) }
-                    }
-                }
+                // Miniatura limpia: duración y barra de progreso coral en el borde inferior
+                Thumbnail(v, Modifier.fillMaxWidth().aspectRatio(16f / 9f), rounded = 12.dp, smallBadge = true)
                 Row(Modifier.padding(top = 6.dp)) {
                     Column(Modifier.weight(1f).padding(horizontal = 2.dp)) {
                         Text(
@@ -331,10 +327,10 @@ fun VideoShelf(
                         if (p != null) {
                             val left = ((1f - p) * v.durationSec).toLong()
                             val leftTxt = if (left >= 3600) "Quedan ${left / 3600} h ${(left % 3600) / 60} min" else "Quedan ${maxOf(1, left / 60)} min"
-                            Row {
-                                Text("${(p * 100).toInt()}%", color = VColors.Red, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                Text(" · $leftTxt", color = VColors.Secondary, fontSize = 11.sp, maxLines = 1)
-                            }
+                            Text(
+                                "$leftTxt · ${(p * 100).toInt()} % visto",
+                                color = VColors.Secondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
                         } else {
                             Text(
                                 joinDot(v.channelName, viewsText(v.views)),
@@ -345,7 +341,7 @@ fun VideoShelf(
                             )
                         }
                     }
-                    if (!resume) Box(Modifier.size(width = 30.dp, height = 36.dp), contentAlignment = Alignment.TopCenter) { VideoMenu(v, onChannel) }
+                    Box(Modifier.size(width = 30.dp, height = 36.dp), contentAlignment = Alignment.TopCenter) { VideoMenu(v, onChannel) }
                 }
             }
         }
@@ -367,8 +363,8 @@ fun DiscoverGrid(tiles: List<DiscoverTile>, onPick: (DiscoverTile) -> Unit) {
                             .weight(1f)
                             .height(92.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Brush.linearGradient(listOf(c, Color(0xFF101114))))
-                            .border(1.dp, Color(0x10FFFFFF), RoundedCornerShape(14.dp))
+                            .background(Brush.linearGradient(listOf(c.copy(alpha = 0.55f), VColors.Surface)))
+                            .border(1.dp, VColors.Divider, RoundedCornerShape(14.dp))
                             .clickable { onPick(t) }
                             .padding(10.dp),
                     ) {
@@ -403,7 +399,13 @@ fun HeroCarousel(videos: List<VideoItem>, onPlay: (VideoItem) -> Unit, onChannel
     val items = videos.take(5)
     if (items.isEmpty()) return
     val pager = androidx.compose.foundation.pager.rememberPagerState { items.size }
-    androidx.compose.runtime.LaunchedEffect(items.size) {
+    // Con "quitar animaciones" activado en Android, el carrusel no avanza solo
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val reduceMotion = remember {
+        android.provider.Settings.Global.getFloat(ctx.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    }
+    androidx.compose.runtime.LaunchedEffect(items.size, reduceMotion) {
+        if (reduceMotion) return@LaunchedEffect
         while (true) {
             kotlinx.coroutines.delay(3000)
             if (!pager.isScrollInProgress && items.size > 1) {
@@ -416,16 +418,16 @@ fun HeroCarousel(videos: List<VideoItem>, onPlay: (VideoItem) -> Unit, onChannel
             HeroCard(items[page], onPlay = { onPlay(items[page]) }, onChannel = onChannel)
         }
         Row(
-            Modifier.align(Alignment.BottomEnd).padding(end = 28.dp, bottom = 18.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            Modifier.align(Alignment.BottomEnd).padding(end = 26.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             items.indices.forEach { i ->
                 val on = i == pager.currentPage
                 Box(
                     Modifier
-                        .size(width = if (on) 22.dp else 8.dp, height = 8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (on) VColors.Red else Color(0x88FFFFFF))
+                        .size(width = if (on) 16.dp else 6.dp, height = 6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(if (on) VColors.Coral else Color(0x66FFFFFF))
                 )
             }
         }

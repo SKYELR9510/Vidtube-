@@ -33,25 +33,33 @@ internal val lightTheme = mutableStateOf(false)
 object VColors {
     private val light get() = lightTheme.value
 
-    // Identidad cinematográfica: negro profundo, negro carbón, plata y rojo solo como acento
-    val Background get() = if (light) Color(0xFFF4F5F7) else Color(0xFF08090B)
-    val Surface get() = if (light) Color(0xFFFFFFFF) else Color(0xFF101114)
-    val Card get() = if (light) Color(0xFFFFFFFF) else Color(0xFF101114)
-    val Raise get() = if (light) Color(0xFFFFFFFF) else Color(0xFF16181C)
-    val Chip get() = if (light) Color(0xFFE9EBEE) else Color(0xFF1B1D22)
-    val ChipSelected get() = Red
-    val Text get() = if (light) Color(0xFF101114) else Color(0xFFFFFFFF)
-    val Secondary get() = if (light) Color(0xFF4F545C) else Color(0xFFBFC3CA)
-    val Muted get() = if (light) Color(0xFF6B7079) else Color(0xFF8B9099)
-    val Divider get() = if (light) Color(0x1A101114) else Color(0x1ABFC3CA)
-    val Silver = Color(0xFFBFC3CA)
+    // Identidad "Coral Eléctrico": fondo azul-noche, superficies grafito y coral solo como acento
+    val Background get() = if (light) Color(0xFFF6F7FA) else Color(0xFF090B12)
+    val Surface get() = if (light) Color(0xFFFFFFFF) else Color(0xFF171B25)
+    val Card get() = if (light) Color(0xFFFFFFFF) else Color(0xFF131722)
+    val Raise get() = if (light) Color(0xFFFFFFFF) else Color(0xFF1C2130)
+    /** Barra inferior y superficies de navegación (grafito oscuro). */
+    val NavBar get() = if (light) Color(0xFFFFFFFF) else Color(0xFF10131B)
+    val Chip get() = if (light) Color(0xFFECEEF2) else Color(0xFF171B25)
+    val ChipSelected get() = Coral
+    val Text get() = if (light) Color(0xFF12141B) else Color(0xFFF5F6FA)
+    val Secondary get() = if (light) Color(0xFF555B66) else Color(0xFFA6ADBA)
+    val Muted get() = if (light) Color(0xFF6E7480) else Color(0xFF7F8695)
+    val Divider get() = if (light) Color(0xFFE2E4EA) else Color(0xFF292D38)
+    val Silver get() = Color(0xFFA6ADBA)
+    /** Velo oscuro para leer texto sobre miniaturas. */
+    val Scrim = Color(0xFF090B12)
 
-    val Red = Color(0xFFF20D25)
-    val RedDeep = Color(0xFFA8071A)
-    val RedGlow = Color(0x66F20D25)
+    val Coral = Color(0xFFFF405B)
+    val Coral2 = Color(0xFFFF875E)
+    // Nombres anteriores (se usan en toda la app): ahora son el coral
+    val Red = Coral
+    val RedDeep = Color(0xFFD92E48)
+    val RedGlow = Color(0x40FF405B)
 
-    /** Degradado rojo de los botones principales. */
-    val RedGradient get() = Brush.linearGradient(listOf(Color(0xFFFF2B40), Red, Color(0xFFB3081B)))
+    /** Botón principal: coral con un toque del coral secundario (sutil). */
+    val RedGradient get() = Brush.linearGradient(listOf(Coral, Color(0xFFFF5A5C)))
+    val CoralGradient get() = RedGradient
 }
 
 @Composable

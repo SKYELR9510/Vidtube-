@@ -274,8 +274,9 @@ private fun CategoryTile(cat: SearchCategory, modifier: Modifier, onClick: () ->
             .height(84.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(
+                // Tono suave de la categoría sobre grafito (sin degradados intensos)
                 androidx.compose.ui.graphics.Brush.linearGradient(
-                    listOf(androidx.compose.ui.graphics.Color(cat.from), androidx.compose.ui.graphics.Color(cat.to))
+                    listOf(androidx.compose.ui.graphics.Color(cat.from).copy(alpha = 0.55f), VColors.Surface)
                 )
             )
             .clickable(onClick = onClick)

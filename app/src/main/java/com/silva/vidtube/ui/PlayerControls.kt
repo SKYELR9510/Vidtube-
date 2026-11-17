@@ -171,7 +171,7 @@ fun PlayerControls(
                     .align(if (seekFlashLeft) Alignment.CenterStart else Alignment.CenterEnd)
                     .padding(horizontal = 36.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(Color(0x66000000))
+                    .background(Color(0x66090B12))
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }
@@ -191,8 +191,8 @@ fun PlayerControls(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            0f to Color(0x99000000), 0.3f to Color(0x33000000),
-                            0.7f to Color(0x33000000), 1f to Color(0xB3000000),
+                            0f to Color(0x99090B12), 0.3f to Color(0x2E090B12),
+                            0.7f to Color(0x2E090B12), 1f to Color(0xB3090B12),
                         )
                     )
             ) {
@@ -403,16 +403,12 @@ fun NeonSeekBar(position: Long, buffered: Long, duration: Long, thick: Boolean, 
             drawLine(Color(0x40FFFFFF), Offset(0f, y), Offset(size.width, y), stroke, StrokeCap.Round)
             drawLine(Color(0x66FFFFFF), Offset(0f, y), Offset(size.width * bufferedFraction, y), stroke, StrokeCap.Round)
             if (end > 0f) {
-                val neon = Brush.horizontalGradient(listOf(Color(0xFFFF3A4C), Color(0xFFF20D25)), 0f, end.coerceAtLeast(1f))
-                // Brillo (capas anchas y transparentes) + línea sólida
-                drawLine(VColors.Red.copy(alpha = 0.18f), Offset(0f, y), Offset(end, y), stroke * 4, StrokeCap.Round)
-                drawLine(VColors.Red.copy(alpha = 0.35f), Offset(0f, y), Offset(end, y), stroke * 2.2f, StrokeCap.Round)
-                drawLine(neon, Offset(0f, y), Offset(end, y), stroke, StrokeCap.Round)
+                // Progreso coral sólido (sin brillo de neón)
+                drawLine(VColors.Coral, Offset(0f, y), Offset(end, y), stroke, StrokeCap.Round)
             }
-            val r = (if (dragging) 9.dp else 6.dp).toPx()
-            drawCircle(VColors.Red.copy(alpha = 0.35f), r * 2f, Offset(end, y))
-            drawCircle(VColors.Red, r, Offset(end, y))
-            drawCircle(Color.White, r * 0.38f, Offset(end, y))
+            val r = (if (dragging) 8.dp else 6.dp).toPx()
+            if (dragging) drawCircle(VColors.Coral.copy(alpha = 0.25f), r * 1.8f, Offset(end, y))
+            drawCircle(VColors.Coral, r, Offset(end, y))
         }
     }
 }
@@ -424,8 +420,8 @@ private fun GlassButton(icon: ImageVector, label: String, size: Dp, onClick: () 
         Modifier
             .size(size)
             .clip(CircleShape)
-            .background(Brush.verticalGradient(listOf(Color(0x40FFFFFF), Color(0x1AFFFFFF))))
-            .border(1.dp, Color(0x55FFFFFF), CircleShape)
+            .background(Color(0x99090B12))
+            .border(1.dp, Color(0x29FFFFFF), CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -492,8 +488,8 @@ private fun NextCard(video: com.silva.vidtube.data.VideoItem, onClick: () -> Uni
             .widthIn(max = 340.dp)
             .height(52.dp)
             .clip(RoundedCornerShape(50))
-            .background(Color(0x99000000))
-            .border(1.5.dp, Brush.horizontalGradient(listOf(Color(0x55FFFFFF), VColors.Red)), RoundedCornerShape(50))
+            .background(Color(0xCC090B12))
+            .border(1.dp, VColors.Coral.copy(alpha = 0.6f), RoundedCornerShape(50))
             .clickable(onClick = onClick)
             .padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

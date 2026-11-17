@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -243,16 +244,13 @@ fun HomeScreen(
                 .clip(RoundedCornerShape(50))
                 .background(VColors.Surface)
                 .border(1.dp, VColors.Divider, RoundedCornerShape(50))
-                .clickable(onClick = onSearch)
-                .padding(start = 16.dp, end = 5.dp),
+                .clickable(onClickLabel = "Buscar", onClick = onSearch)
+                .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.Search, null, tint = VColors.Muted, modifier = Modifier.size(20.dp))
-            Text("Buscar videos, canales, música…", color = VColors.Muted, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(start = 10.dp))
-            Box(
-                Modifier.size(34.dp).clip(CircleShape).background(VColors.RedGradient),
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Outlined.Search, "Buscar", tint = Color.White, modifier = Modifier.size(18.dp)) }
+            // Un solo ícono de búsqueda, integrado al campo
+            Icon(Icons.Outlined.Search, "Buscar", tint = VColors.Secondary, modifier = Modifier.size(20.dp))
+            Text("Buscar videos, canales, música...", color = VColors.Secondary, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(start = 10.dp))
         }
         LazyRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
@@ -300,7 +298,7 @@ fun HomeScreen(
                         item("subs_title") { SectionTitle("Novedades de tus suscripciones") }
                         item("subs_row") { VideoShelf(recent, onVideo, onChannel) }
                     }
-                    item("feed_title") { SectionTitle("Recomendado para ti") }
+                    item("feed_title") { SectionTitle("Recomendados para ti") }
                 } else {
                     item("shelf_title") {
                         val label = vm.chips.firstOrNull { it.id == vm.selected }?.label ?: ""
@@ -345,10 +343,11 @@ fun CategoryChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageV
         Modifier
             .clip(RoundedCornerShape(50))
             .then(
-                if (selected) Modifier.background(VColors.RedGradient)
-                else Modifier.background(VColors.Surface).border(1.dp, VColors.Divider, RoundedCornerShape(50))
+                if (selected) Modifier.background(VColors.Coral)
+                else Modifier.background(VColors.Chip).border(1.dp, VColors.Divider, RoundedCornerShape(50))
             )
-            .clickable(onClick = onClick)
+            .clickable(role = androidx.compose.ui.semantics.Role.Tab, onClick = onClick)
+            .heightIn(min = 36.dp)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -372,7 +371,7 @@ fun ProfileButton(onLibrary: () -> Unit, onSettings: () -> Unit) {
     val settings by Library.settings.collectAsState()
     Box(Modifier.padding(horizontal = 6.dp)) {
         Box(
-            Modifier.size(36.dp).clip(CircleShape).background(VColors.RedGradient).clickable { open = true },
+            Modifier.size(36.dp).clip(CircleShape).background(VColors.Coral).clickable(onClickLabel = "Abrir perfil") { open = true },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Filled.Person, "Tu perfil", tint = Color.White, modifier = Modifier.size(22.dp)) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
