@@ -263,7 +263,9 @@ fun HomeScreen(
             item("more_cats") { CategoryChip("Más categorías", Icons.Outlined.Explore, false, onSearch) }
         }
         var scrollToFeed by androidx.compose.runtime.remember { mutableStateOf(0) }
-        val showTip = vm.selected == "todo" && Library.subscriptions.value.isEmpty() && Library.history.value.size < 3
+        val subsNow by Library.subscriptions.collectAsState()
+        val historyNow by Library.history.collectAsState()
+        val showTip = vm.selected == "todo" && subsNow.isEmpty() && historyNow.size < 3
         // Destacado + fila de Tendencias arriba (cuando ya hay suficientes videos)
         val videos = paged.items.filterIsInstance<FeedEntry.Video>().map { it.video }
         val featured = paged.items.size >= 16 && paged.items.take(13).all { it is FeedEntry.Video }
@@ -282,7 +284,7 @@ fun HomeScreen(
                 item("hero") { HeroCarousel(videos.take(5), onPlay = onVideo, onChannel = onChannel) }
                 if (vm.selected == "todo") {
                     // Continuar viendo: videos con posición guardada
-                    val cont = Library.history.value.filter { !it.isShort && progressOf(it) != null }.take(12)
+                    val cont = historyNow.filter { !it.isShort && progressOf(it) != null }.take(12)
                     if (cont.isNotEmpty()) {
                         item("cont_title") { SectionTitle("Continuar viendo") }
                         item("cont") { VideoShelf(cont, onVideo, onChannel, resume = true) }

@@ -38,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -184,7 +185,7 @@ fun SearchScreen(
                 emptySubtitle = "Prueba con otras palabras.",
             )
         } else {
-            val recent = Library.searches.value
+            val recent by Library.searches.collectAsState()
             val rows: List<Pair<String, Boolean>> =
                 if (vm.text.isBlank()) recent.map { it to true }
                 else vm.suggestions.map { it to false }
