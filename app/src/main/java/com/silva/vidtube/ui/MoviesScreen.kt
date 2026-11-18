@@ -214,7 +214,12 @@ fun MovieScreen(id: Long, onBack: () -> Unit, onVideo: (VideoItem) -> Unit, onMo
                     ) {
                         val first = full?.firstOrNull()
                         PillButton(
-                            if (first != null) "Ver película" else if (full == null) "Buscando…" else "No disponible gratis",
+                            when {
+                                first != null -> "Ver película"
+                                !Tmdb.mayBeFreeOnYoutube(d.movie) -> "Aún no está gratis"
+                                full == null -> "Buscando…"
+                                else -> "No disponible gratis"
+                            },
                             Icons.Filled.PlayArrow, primary = true, enabled = first != null,
                             modifier = Modifier.weight(1f),
                         ) { first?.let(onVideo) }
@@ -268,8 +273,13 @@ fun MovieScreen(id: Long, onBack: () -> Unit, onVideo: (VideoItem) -> Unit, onMo
                     f.isEmpty() -> item("full_none") {
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                             Text(
-                                "No encontramos esta película completa y gratis en YouTube. Puedes ver el tráiler " +
-                                    "o buscarla tú mismo.",
+                                if (!Tmdb.mayBeFreeOnYoutube(d.movie))
+                                    "Es un estreno reciente: todavía está en cines o en plataformas de pago, así que no " +
+                                        "está gratis en YouTube. Los videos que dicen «película completa» son reseñas o engaños. " +
+                                        "Mira el tráiler mientras tanto."
+                                else
+                                    "No encontramos esta película completa y gratis en YouTube (descartamos reseñas, " +
+                                        "resúmenes y fragmentos). Puedes ver el tráiler.",
                                 color = VColors.Secondary, fontSize = 13.sp,
                             )
                         }

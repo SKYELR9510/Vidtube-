@@ -112,7 +112,7 @@ object Repository {
         val handler = yt.searchQHFactory.fromQuery(query, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
         val info = SearchInfo.getInfo(yt, handler)
         val keep: (VideoItem) -> Boolean = { v ->
-            v.durationSec >= minSec && !(noTrailers && trailerWords.containsMatchIn(v.title))
+            v.durationSec >= minSec && !(noTrailers && (trailerWords.containsMatchIn(v.title) || Tmdb.looksFake(v.title, v.channelName)))
         }
         freshPage(handler, info.relatedItems, info.nextPage, maxAgeDays, pagesLeft = if (minSec > 0) 4 else 2, keep = keep)
     }
@@ -156,11 +156,17 @@ object Repository {
 
     // ---------- Películas (con datos de TMDB) ----------
     /**
-     * Busca en YouTube la película completa (gratuita y subida por quien la publique).
-     * Solo deja videos largos cuyo título coincide con la película.
+     * Busca en YouTube la película completa gratuita. YouTube está lleno de videos con
+     * "película completa" en el título que en realidad son reseñas, resúmenes o fragmentos,
+     * así que el filtro es estricto:
+     *  - Los estrenos (de este año o del anterior) no se buscan: nunca están gratis de verdad.
+     *  - La duración tiene que parecerse a la de la película (±12 %).
+     *  - Se descartan títulos y canales de reseñas, resúmenes, escenas, reacciones, etc.
      */
     suspend fun fullMovie(movie: TmdbMovie, runtimeMin: Int): List<VideoItem> = withContext(Dispatchers.IO) {
-        val minSec = if (runtimeMin > 0) (runtimeMin * 60L * 0.7).toLong() else 3600L
+        if (!Tmdb.mayBeFreeOnYoutube(movie)) return@withContext emptyList()
+        val runtimeSec = if (runtimeMin > 0) runtimeMin * 60L else 0L
+        val minSec = if (runtimeSec > 0) (runtimeSec * 0.88).toLong() else 3600L
         val year = movie.year?.toString().orEmpty()
         val queries = buildList {
             add("${movie.title} $year película completa")
@@ -170,7 +176,7 @@ object Repository {
         for (q in queries) {
             val r = runCatching { categorySearch(q, minSec = minSec, noTrailers = true) }.getOrNull() ?: continue
             r.items.filterIsInstance<FeedEntry.Video>().map { it.video }
-                .filter { Tmdb.matches(it.title, movie) }
+                .filter { Tmdb.looksLikeFullMovie(it.title, it.channelName, it.durationSec, runtimeSec, movie) }
                 .forEach { found.putIfAbsent(it.url, it) }
             if (found.size >= 6) break
         }

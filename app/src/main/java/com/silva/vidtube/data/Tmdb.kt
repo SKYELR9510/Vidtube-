@@ -221,6 +221,47 @@ object Tmdb {
             .any { t -> v.contains(t) }
     }
 
+    /** Palabras de videos que dicen "película completa" pero no lo son. */
+    private val fakeWords = Regex(
+        "\\b(resena|review|reviews|critica|critic|criticas|resumen|resumida|recap|explicad[ao]|explicacion|" +
+            "analisis|reaccion|reaction|reacciona|escena|escenas|pelea|clip|clips|fragmento|teaser|trailer|" +
+            "podcast|en minutos|en \\d+ minutos|curiosidades|easter eggs|teoria|teorias|final explicado|" +
+            "spoilers?|opinion|comentario|comentamos|ending|recapped|movie recap)\\b"
+    )
+
+    /**
+     * Las películas de este año o del anterior siguen en cines o plataformas de pago:
+     * en YouTube no están gratis de forma legítima, solo hay engaños con ese título.
+     */
+    fun mayBeFreeOnYoutube(movie: TmdbMovie, currentYear: Int = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)): Boolean {
+        val y = movie.year ?: return true
+        return y <= currentYear - 2
+    }
+
+    /**
+     * Video con título de "película completa" que no lo es: reseñas, resúmenes, escenas,
+     * o un estreno de este año o del anterior (que no puede estar gratis de verdad).
+     */
+    fun looksFake(title: String, channel: String, currentYear: Int = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)): Boolean {
+        val t = norm(title)
+        if (fakeWords.containsMatchIn(t) || fakeWords.containsMatchIn(norm(channel))) return true
+        val recent = Regex("\\b(${currentYear}|${currentYear - 1})\\b")
+        return recent.containsMatchIn(t) && Regex("pelicula completa|full movie").containsMatchIn(t)
+    }
+
+    /** ¿Este video de YouTube parece de verdad la película completa? */
+    fun looksLikeFullMovie(title: String, channel: String, durationSec: Long, runtimeSec: Long, movie: TmdbMovie): Boolean {
+        if (!matches(title, movie)) return false
+        if (looksFake(title, channel)) return false
+        if (runtimeSec > 0) {
+            val ratio = durationSec.toDouble() / runtimeSec
+            if (ratio < 0.88 || ratio > 1.12) return false
+        } else if (durationSec < 3600) {
+            return false
+        }
+        return true
+    }
+
     fun norm(s: String): String = java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD)
         .replace(Regex("\\p{Mn}+"), "")
         .replace(Regex("[^a-z0-9ñ ]"), " ")

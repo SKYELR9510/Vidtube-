@@ -71,4 +71,29 @@ class TmdbTest {
         assertFalse(Tmdb.matches("Rápidos y furiosos película completa", m))
         assertEquals("accion y comedia", Tmdb.norm("¡Acción  y Comedia!"))
     }
+
+    @Test
+    fun descartaPeliculasCompletasFalsas() {
+        val year = 2026
+        // Los casos reales que aparecieron: reseñas con título de "película completa"
+        assertTrue(Tmdb.looksFake("Spider-Man: Un Nuevo Día (2026) Película Completa en Español | Película", "Rehman Critica", year))
+        assertTrue(Tmdb.looksFake("Allen 2026 Full Movie | T.J. Power, Edward A. O'Sullivan", "Harry Critic", year))
+        assertTrue(Tmdb.looksFake("Pelea final COMPLETA + Final explicado", "Cine X", year))
+        assertTrue(Tmdb.looksFake("Matrix resumida en 10 minutos", "Resumen Cine", year))
+        // Una película antigua subida completa sí pasa
+        assertFalse(Tmdb.looksFake("La noche de los muertos vivientes (1968) película completa", "Clásicos de siempre", year))
+        assertFalse(Tmdb.looksFake("Harry Potter y las reliquias de la muerte parte 2 película completa", "Cine", year))
+    }
+
+    @Test
+    fun estrenosNoSeBuscanYLaDuracionDebeCoincidir() {
+        val m = Tmdb.parseList(JSONObject(listJson))[0] // Matrix, 1999
+        assertTrue(Tmdb.mayBeFreeOnYoutube(m, 2026))
+        assertFalse(Tmdb.mayBeFreeOnYoutube(m.copy(year = 2026), 2026))
+        assertFalse(Tmdb.mayBeFreeOnYoutube(m.copy(year = 2025), 2026))
+        val runtime = 136 * 60L
+        assertTrue(Tmdb.looksLikeFullMovie("Matrix película completa en español", "Cine Clásico", runtime, runtime, m))
+        assertFalse(Tmdb.looksLikeFullMovie("Matrix película completa en español", "Cine Clásico", runtime / 2, runtime, m))
+        assertFalse(Tmdb.looksLikeFullMovie("Matrix reseña completa", "Cine Clásico", runtime, runtime, m))
+    }
 }

@@ -192,9 +192,10 @@ object NowPlaying {
      * Si el video se queda "cargando" sin avanzar, probamos otra forma de cargarlo;
      * si ninguna funciona, mostramos el error real en vez de girar para siempre.
      */
-    private fun startStallWatch(context: Context, info: StreamInfo, quality: Int) {
+    private fun startStallWatch(context: Context, info: StreamInfo, quality: Int, allowRefresh: Boolean = true) {
         stallJob?.cancel()
         stallJob = scope.launch {
+            var refreshed = !allowRefresh
             var stuck = 0
             var lastPos = -1L
             while (isActive) {
@@ -205,8 +206,25 @@ object NowPlaying {
                 val waiting = p.playWhenReady && p.playbackState == Player.STATE_BUFFERING
                 if (waiting && pos == lastPos) stuck++ else stuck = 0
                 lastPos = pos
-                if (stuck >= 12) {
+                if (stuck >= 10) {
                     stuck = 0
+                    // 1º: los enlaces de YouTube pueden dejar de responder a mitad del video.
+                    // Pedimos enlaces nuevos y seguimos desde el mismo punto.
+                    if (!refreshed) {
+                        refreshed = true
+                        val url = _state.value?.video?.url
+                        val fresh = url?.let { u -> runCatching { Repository.stream(u) }.getOrNull() }
+                        if (fresh != null && _state.value?.info === info) {
+                            Log.w("Vidtube", "Video atascado (${PlayerHolder.lastLoadError}); pido enlaces nuevos")
+                            val at = p.currentPosition
+                            val ok = runCatching { PlayerHolder.play(context, fresh, quality, at) }.isSuccess
+                            if (ok) {
+                                _state.value = _state.value?.copy(info = fresh)
+                                startStallWatch(context, fresh, quality, allowRefresh = false)
+                                break
+                            }
+                        }
+                    }
                     Log.w("Vidtube", "Video atascado (${PlayerHolder.lastLoadError}); probando otro modo")
                     val retried = runCatching { PlayerHolder.retryWithFallback(context, info, quality) }
                         .getOrDefault(false)
