@@ -83,12 +83,48 @@ object UserLinks {
 
     fun kindOf(url: String): UserLink.Kind {
         val host = hostOf(url).lowercase()
+        // Google Drive y Dropbox se convierten en enlaces directos al archivo
+        if (driveId(url) != null || host == "dropbox.com" || host.endsWith(".dropbox.com") ||
+            host == "dropboxusercontent.com" || host.endsWith(".dropboxusercontent.com")
+        ) return UserLink.Kind.VIDEO_FILE
         if (host == "youtube.com" || host == "youtu.be" || host.endsWith(".youtube.com") || host == "music.youtube.com") {
             return UserLink.Kind.YOUTUBE
         }
         val path = runCatching { java.net.URI(url).path.orEmpty().lowercase() }.getOrDefault("")
         if (Regex("\\.(mp4|m4v|webm|mkv|mov|m3u8|mpd|avi|3gp)$").containsMatchIn(path)) return UserLink.Kind.VIDEO_FILE
         return UserLink.Kind.WEB
+    }
+
+    /** Id del archivo de un enlace de Google Drive (…/file/d/ID/…, …?id=ID). */
+    fun driveId(url: String): String? {
+        val host = hostOf(url).lowercase()
+        if (host != "drive.google.com" && host != "docs.google.com" && host != "drive.usercontent.google.com") return null
+        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return null
+        val fromPath = Regex("/file/d/([A-Za-z0-9_-]{10,})").find(uri.path.orEmpty())?.groupValues?.get(1)
+        val fromQuery = uri.rawQuery.orEmpty().split('&').firstOrNull { it.startsWith("id=") }?.removePrefix("id=")
+        return (fromPath ?: fromQuery)?.takeIf { Regex("^[A-Za-z0-9_-]{10,}$").matches(it) }
+    }
+
+    /**
+     * Enlace que el reproductor puede leer directamente:
+     *  - Google Drive: descarga directa (el archivo debe estar compartido con "cualquier persona con el enlace").
+     *  - Dropbox: ?raw=1 en vez de la página de vista previa.
+     *  - Lo demás queda igual.
+     */
+    fun directUrl(url: String): String {
+        driveId(url)?.let { return "https://drive.usercontent.google.com/download?id=$it&export=download&confirm=t" }
+        val host = hostOf(url).lowercase()
+        if (host == "dropbox.com" || host.endsWith(".dropbox.com")) {
+            val base = url.replace(Regex("([?&])dl=[01]"), "$1raw=1")
+            return if (base.contains("raw=1")) base else base + (if ('?' in base) "&" else "?") + "raw=1"
+        }
+        return url
+    }
+
+    /** ¿Es un enlace de YouTube? */
+    fun isYoutube(url: String): Boolean {
+        val host = hostOf(url).lowercase()
+        return host == "youtube.com" || host == "youtu.be" || host.endsWith(".youtube.com")
     }
 
     /** Convierte cualquier enlace de YouTube al formato que entiende el reproductor. */

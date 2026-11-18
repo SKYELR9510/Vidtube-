@@ -201,6 +201,8 @@ fun MovieScreen(
     onVideo: (VideoItem) -> Unit,
     onMovie: (Long, Boolean) -> Unit,
     tv: Boolean = false,
+    /** Abrir una página dentro de Vidtube (enlaces propios que no son archivos de video). */
+    onWeb: (url: String, title: String) -> Unit = { _, _ -> },
 ) {
     var detail by remember(id) { mutableStateOf<TmdbDetail?>(null) }
     var error by remember(id) { mutableStateOf<String?>(null) }
@@ -283,7 +285,7 @@ fun MovieScreen(
                             modifier = Modifier.weight(1f),
                         ) {
                             if (first != null) onVideo(first)
-                            else if (mine != null) openUserLink(context, mine, d.movie.title, onVideo)
+                            else if (mine != null) openUserLink(context, mine, d.movie, onVideo, onWeb)
                             else if (platformUrl != null) openLink(context, platformUrl)
                             else if (other != null) onVideo(other)
                         }
@@ -294,7 +296,7 @@ fun MovieScreen(
                     }
                 }
                 item("mylinks") {
-                    MyLinks(myLinks, onOpen = { l -> openUserLink(context, l, d.movie.title, onVideo) },
+                    MyLinks(myLinks, onOpen = { l -> openUserLink(context, l, d.movie, onVideo, onWeb) },
                         onRemove = { l -> com.silva.vidtube.data.UserLinks.remove(linkKey, l) }, onAdd = { addLink = true })
                 }
                 d.watch?.let { w ->
@@ -605,8 +607,8 @@ private fun MyLinks(
                     Text(
                         when (l.kind) {
                             com.silva.vidtube.data.UserLink.Kind.YOUTUBE -> "YouTube · se ve en Vidtube"
-                            com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · archivo de video"
-                            else -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · se abre en el navegador"
+                            com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · en el reproductor de Vidtube"
+                            else -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · página, se abre dentro de Vidtube"
                         },
                         color = VColors.Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
@@ -640,8 +642,8 @@ private fun AddLinkDialog(onDismiss: () -> Unit, onSave: (url: String, name: Str
         text = {
             Column {
                 Text(
-                    "Pega el enlace de un video de YouTube, de un archivo de video o de una página. " +
-                        "Se guarda solo en este celular.",
+                    "Pega un enlace de YouTube, Google Drive, Dropbox, un archivo de video (.mp4, .m3u8…) " +
+                        "o una página con reproductor. Todo se ve dentro de Vidtube. Se guarda solo en este celular.",
                     color = VColors.Secondary, fontSize = 13.sp,
                 )
                 Spacer(Modifier.height(10.dp))
@@ -669,31 +671,29 @@ private fun AddLinkDialog(onDismiss: () -> Unit, onSave: (url: String, name: Str
     )
 }
 
-/** Abre un enlace del usuario: YouTube en Vidtube, archivos de video en un reproductor, lo demás en el navegador. */
+/**
+ * Abre un enlace del usuario dentro de Vidtube:
+ *  - YouTube, Google Drive, Dropbox y archivos de video → el reproductor de Vidtube.
+ *  - Otras páginas → el reproductor de páginas (dentro de la app, sin ventanas emergentes).
+ */
+@Suppress("UNUSED_PARAMETER")
 private fun openUserLink(
     context: android.content.Context,
     link: com.silva.vidtube.data.UserLink,
-    title: String,
+    movie: TmdbMovie,
     onVideo: (VideoItem) -> Unit,
+    onWeb: (String, String) -> Unit,
 ) {
+    fun item(url: String) = VideoItem(
+        url = url, title = movie.title, thumbnail = movie.backdrop ?: movie.poster, channelName = link.name,
+        channelUrl = null, channelAvatar = null, durationSec = 0, views = -1, uploaded = null, isLive = false,
+    )
     when (link.kind) {
         com.silva.vidtube.data.UserLink.Kind.YOUTUBE -> {
             val watch = com.silva.vidtube.data.UserLinks.youtubeWatchUrl(link.url)
-            if (watch != null) {
-                onVideo(
-                    VideoItem(
-                        url = watch, title = title, thumbnail = null, channelName = link.name,
-                        channelUrl = null, channelAvatar = null, durationSec = 0, views = -1, uploaded = null, isLive = false,
-                    )
-                )
-            } else openLink(context, link.url)
+            if (watch != null) onVideo(item(watch)) else onWeb(link.url, movie.title)
         }
-        com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> runCatching {
-            val i = android.content.Intent(android.content.Intent.ACTION_VIEW)
-                .setDataAndType(android.net.Uri.parse(link.url), "video/*")
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(android.content.Intent.createChooser(i, "Abrir video con").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-        }.onFailure { openLink(context, link.url) }
-        else -> openLink(context, link.url)
+        com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> onVideo(item(link.url))
+        else -> onWeb(link.url, movie.title)
     }
 }

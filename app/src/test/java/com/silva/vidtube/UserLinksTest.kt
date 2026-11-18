@@ -27,4 +27,18 @@ class UserLinksTest {
         assertEquals("https://www.youtube.com/watch?v=dQw4w9WgXcQ", UserLinks.youtubeWatchUrl("https://m.youtube.com/watch?feature=x&v=dQw4w9WgXcQ"))
         assertEquals("https://www.youtube.com/watch?v=abcDEF12345", UserLinks.youtubeWatchUrl("https://www.youtube.com/shorts/abcDEF12345"))
     }
+
+    @Test
+    fun driveYDropboxSeVenEnElReproductor() {
+        val drive = "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view?usp=sharing"
+        assertEquals(UserLink.Kind.VIDEO_FILE, UserLinks.kindOf(drive))
+        assertEquals("https://drive.usercontent.google.com/download?id=1AbCdEfGhIjKlMnOp&export=download&confirm=t", UserLinks.directUrl(drive))
+        assertEquals("1AbCdEfGhIjKlMnOp", UserLinks.driveId("https://drive.google.com/open?id=1AbCdEfGhIjKlMnOp"))
+        val dbx = "https://www.dropbox.com/s/abc123/pelicula.mp4?dl=0"
+        assertEquals(UserLink.Kind.VIDEO_FILE, UserLinks.kindOf(dbx))
+        assertEquals("https://www.dropbox.com/s/abc123/pelicula.mp4?raw=1", UserLinks.directUrl(dbx))
+        assertEquals("https://cdn.x.com/a.mp4", UserLinks.directUrl("https://cdn.x.com/a.mp4"))
+        org.junit.Assert.assertTrue(UserLinks.isYoutube("https://m.youtube.com/watch?v=x"))
+        org.junit.Assert.assertFalse(UserLinks.isYoutube(drive))
+    }
 }

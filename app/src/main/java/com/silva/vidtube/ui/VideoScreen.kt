@@ -364,6 +364,7 @@ fun VideoScreen(
             state.loading -> LoadingView()
             state.error != null -> ErrorView(state.error, onRetry = { NowPlaying.retry(context) })
             state.info != null -> VideoDetails(state, state.info, onChannel)
+            else -> DirectLinkDetails(state.video)
         }
     }
 }
@@ -994,4 +995,23 @@ private fun chapterClock(ms: Long): String {
     val t = ms / 1000
     val h = t / 3600; val m = (t % 3600) / 60; val sec = t % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
+}
+
+/** Información de un video que viene de un enlace propio (Drive, Dropbox, archivo). */
+@Composable
+private fun DirectLinkDetails(video: VideoItem) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+        Text(video.title, color = VColors.Text, fontSize = 18.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Desde tus enlaces · " + com.silva.vidtube.data.UserLinks.hostOf(video.url),
+            color = VColors.Secondary, fontSize = 13.sp,
+        )
+        Spacer(Modifier.height(14.dp))
+        Text(
+            "Si no carga: en Google Drive el archivo debe estar compartido como «Cualquier persona con el enlace». " +
+                "Drive también limita las reproducciones cuando un archivo se ve mucho; en ese caso intenta más tarde.",
+            color = VColors.Muted, fontSize = 12.sp, lineHeight = 17.sp,
+        )
+    }
 }

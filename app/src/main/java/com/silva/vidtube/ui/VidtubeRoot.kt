@@ -97,6 +97,11 @@ fun VidtubeRoot(isInPip: Boolean) {
     val openSearch: () -> Unit = { nav.navigate("search") { launchSingleTop = true } }
     val openSettings: () -> Unit = { nav.navigate("settings") { launchSingleTop = true } }
     // Ficha de TMDB: película o serie
+    val openWeb: (String, String) -> Unit = { url, title ->
+        // Antes de abrir la página se detiene lo que suene en el reproductor de Vidtube
+        com.silva.vidtube.player.PlayerHolder.playerOrNull?.pause()
+        nav.navigate("web/" + Uri.encode(url) + "/" + Uri.encode(title.ifBlank { "Enlace" }))
+    }
     val openTitle: (Long, Boolean) -> Unit = { id, tv -> nav.navigate((if (tv) "tv/" else "movie/") + id) }
 
     Box(Modifier.fillMaxSize().background(VColors.Background)) {
@@ -184,6 +189,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                         onBack = { nav.popBackStack() },
                         onVideo = openVideo,
                         onMovie = openTitle,
+                        onWeb = openWeb,
                     )
                 }
                 composable("tv/{id}") { entry ->
@@ -193,6 +199,14 @@ fun VidtubeRoot(isInPip: Boolean) {
                         onVideo = openVideo,
                         onMovie = openTitle,
                         tv = true,
+                        onWeb = openWeb,
+                    )
+                }
+                composable("web/{url}/{title}") { entry ->
+                    WebPlayerScreen(
+                        url = Uri.decode(entry.arguments?.getString("url") ?: ""),
+                        title = Uri.decode(entry.arguments?.getString("title") ?: ""),
+                        onBack = { nav.popBackStack() },
                     )
                 }
                 composable("downloads") { DownloadsScreen(onBack = { nav.popBackStack() }) }

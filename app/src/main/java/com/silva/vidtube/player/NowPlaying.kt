@@ -82,6 +82,19 @@ object NowPlaying {
         _upNext.value = null
 
         loadJob?.cancel()
+        // Enlaces propios (Drive, Dropbox, archivos de video): se reproducen directo, sin YouTube
+        if (!com.silva.vidtube.data.UserLinks.isYoutube(video.url)) {
+            _state.value = State(video = video, loading = false, quality = quality)
+            runCatching {
+                PlayerHolder.playDirect(appContext, com.silva.vidtube.data.UserLinks.directUrl(video.url), Library.position(video.url))
+            }.onFailure { e ->
+                _state.value = _state.value?.copy(error = "No se pudo abrir este enlace: ${e.message ?: e.javaClass.simpleName}")
+            }
+            Library.addToHistory(video)
+            releaseWakeLock()
+            startPositionSaver()
+            return
+        }
         loadJob = scope.launch {
             try {
                 val cached = prefetched?.takeIf { it.first == video.url }?.second
@@ -158,7 +171,7 @@ object NowPlaying {
             override fun onTimelineChanged(timeline: Timeline, reason: Int) {
                 if (PlayerHolder.shortsMode) return
                 val s = _state.value ?: return
-                if (timeline.isEmpty && !s.loading && s.info != null) close(context)
+                if (timeline.isEmpty && !s.loading && (s.info != null || !com.silva.vidtube.data.UserLinks.isYoutube(s.video.url))) close(context)
             }
         })
     }

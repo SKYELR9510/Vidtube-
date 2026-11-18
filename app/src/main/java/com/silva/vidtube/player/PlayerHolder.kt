@@ -156,6 +156,38 @@ object PlayerHolder {
         startService(context)
     }
 
+    /**
+     * Reproduce un enlace propio (Drive, Dropbox, .mp4, .m3u8…) en el mismo reproductor.
+     * Se usa un acceso HTTP normal (no el de YouTube) que sigue redirecciones.
+     */
+    fun playDirect(context: Context, url: String, startMs: Long) {
+        Chapters.set(emptyList())
+        subtitleLanguage.value = null
+        sourceMode = 0
+        lastLoadError = null
+        val http = com.google.android.exoplayer2.upstream.DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36")
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(20_000)
+        val item = MediaItem.fromUri(Uri.parse(url))
+        val path = Uri.parse(url).path.orEmpty().lowercase()
+        val source = when {
+            path.endsWith(".m3u8") || url.contains("m3u8", ignoreCase = true) ->
+                HlsMediaSource.Factory(http).createMediaSource(item)
+            path.endsWith(".mpd") ->
+                DashMediaSource.Factory(DefaultDashChunkSource.Factory(http), http).createMediaSource(item)
+            else -> ProgressiveMediaSource.Factory(http).createMediaSource(item)
+        }
+        val p = player(context)
+        shortsMode = false
+        p.repeatMode = Player.REPEAT_MODE_OFF
+        p.setMediaSource(source, startMs)
+        p.prepare()
+        p.playWhenReady = true
+        startService(context)
+    }
+
     /** Cambia la calidad manteniendo la posición. */
     suspend fun changeQuality(context: Context, info: StreamInfo, quality: Int) {
         val source = withContext(Dispatchers.IO) { buildSource(info, quality) }
