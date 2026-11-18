@@ -86,8 +86,10 @@ class SearchViewModel : ViewModel() {
     /** Películas de TMDB que coinciden con lo buscado (fila de pósters arriba). */
     var movies by mutableStateOf<List<com.silva.vidtube.data.TmdbMovie>>(emptyList())
         private set
-    /** Se abrió la categoría Películas: arriba van las filas de TMDB. */
+    /** Se abrió la categoría Películas o Series: arriba van las filas de TMDB. */
     var movieCategory by mutableStateOf(false)
+        private set
+    var seriesCategory by mutableStateOf(false)
         private set
 
     fun onTextChange(value: String) {
@@ -112,6 +114,7 @@ class SearchViewModel : ViewModel() {
         suggestions = emptyList()
         Library.addSearch(q)
         movieCategory = false
+        seriesCategory = false
         movies = emptyList()
         if (com.silva.vidtube.data.Tmdb.isConfigured()) viewModelScope.launch {
             movies = runCatching { com.silva.vidtube.data.Tmdb.search(q) }.getOrDefault(emptyList())
@@ -130,6 +133,7 @@ class SearchViewModel : ViewModel() {
         suggestions = emptyList()
         movies = emptyList()
         movieCategory = chip == "c:peliculas"
+        seriesCategory = chip == "c:series"
         val p = Paged(viewModelScope) { loadChip(chip) }
         results = p
         p.loadIfNeeded()
@@ -141,12 +145,15 @@ fun SearchScreen(
     onBack: () -> Unit,
     onVideo: (VideoItem) -> Unit,
     onChannel: (String) -> Unit,
-    onMovie: (Long) -> Unit = {},
+    onMovie: (Long, Boolean) -> Unit = { _, _ -> },
     onSettings: () -> Unit = {},
     vm: SearchViewModel = viewModel(),
     moviesVm: MoviesViewModel = viewModel(),
 ) {
-    LaunchedEffect(vm.movieCategory) { if (vm.movieCategory) moviesVm.load() }
+    LaunchedEffect(vm.movieCategory, vm.seriesCategory) {
+        if (vm.movieCategory) moviesVm.load(tv = false)
+        if (vm.seriesCategory) moviesVm.load(tv = true)
+    }
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
     // El teclado no se abre solo: así se ven las categorías (tocar la barra para escribir)
@@ -183,16 +190,16 @@ fun SearchScreen(
                 emptyTitle = "Sin resultados",
                 emptySubtitle = "Prueba con otras palabras.",
                 header = {
-                    if (vm.movieCategory) movieRows(moviesVm, onMovie, onSettings)
+                    if (vm.movieCategory || vm.seriesCategory) movieRows(moviesVm, onMovie, onSettings, tv = vm.seriesCategory)
                     val ms = vm.movies
                     if (ms.isNotEmpty()) {
-                        item("tmdb_search_t") { SectionTitle("Películas") }
+                        item("tmdb_search_t") { SectionTitle("Películas y series") }
                         item("tmdb_search") {
                             LazyRow(
                                 contentPadding = PaddingValues(horizontal = 12.dp),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                items(ms, key = { it.id }) { m -> PosterCard(m, width = 104.dp) { onMovie(m.id) } }
+                                items(ms, key = { it.id }) { m -> PosterCard(m, width = 104.dp) { onMovie(m.id, m.tv) } }
                             }
                         }
                         item("tmdb_search_v") { SectionTitle("Videos") }

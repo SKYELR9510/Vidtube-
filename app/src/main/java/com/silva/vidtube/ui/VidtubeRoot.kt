@@ -96,6 +96,8 @@ fun VidtubeRoot(isInPip: Boolean) {
     }
     val openSearch: () -> Unit = { nav.navigate("search") { launchSingleTop = true } }
     val openSettings: () -> Unit = { nav.navigate("settings") { launchSingleTop = true } }
+    // Ficha de TMDB: película o serie
+    val openTitle: (Long, Boolean) -> Unit = { id, tv -> nav.navigate((if (tv) "tv/" else "movie/") + id) }
 
     Box(Modifier.fillMaxSize().background(VColors.Background)) {
         Scaffold(
@@ -140,7 +142,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                             launchSingleTop = true
                             restoreState = true
                         }
-                    }, onMovie = { id -> nav.navigate("movie/$id") })
+                    }, onMovie = openTitle)
                 }
                 composable("more/{id}/{title}") { entry ->
                     MoreScreen(
@@ -169,7 +171,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                 composable("search") {
                     SearchScreen(
                         onBack = { nav.popBackStack() }, onVideo = openVideo, onChannel = openChannel,
-                        onMovie = { id -> nav.navigate("movie/$id") }, onSettings = openSettings,
+                        onMovie = openTitle, onSettings = openSettings,
                     )
                 }
                 composable("channel/{url}") { entry ->
@@ -181,7 +183,16 @@ fun VidtubeRoot(isInPip: Boolean) {
                         id = entry.arguments?.getString("id")?.toLongOrNull() ?: 0L,
                         onBack = { nav.popBackStack() },
                         onVideo = openVideo,
-                        onMovie = { id -> nav.navigate("movie/$id") },
+                        onMovie = openTitle,
+                    )
+                }
+                composable("tv/{id}") { entry ->
+                    MovieScreen(
+                        id = entry.arguments?.getString("id")?.toLongOrNull() ?: 0L,
+                        onBack = { nav.popBackStack() },
+                        onVideo = openVideo,
+                        onMovie = openTitle,
+                        tv = true,
                     )
                 }
                 composable("downloads") { DownloadsScreen(onBack = { nav.popBackStack() }) }

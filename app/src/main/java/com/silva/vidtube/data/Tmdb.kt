@@ -21,7 +21,12 @@ data class TmdbMovie(
     val poster: String?,
     val backdrop: String?,
     val rating: Double,
+    /** true = serie de TV; false = película. */
+    val tv: Boolean = false,
 )
+
+/** Temporada de una serie. */
+data class TmdbSeason(val number: Int, val name: String, val episodes: Int, val poster: String?, val year: Int?)
 
 data class TmdbPerson(val name: String, val character: String, val photo: String?)
 
@@ -34,10 +39,12 @@ data class TmdbDetail(
     val director: String?,
     /** Clave de YouTube del tráiler (en español si existe). */
     val trailerKey: String?,
+    /** Solo series: temporadas (sin "especiales"). */
+    val seasons: List<TmdbSeason> = emptyList(),
 )
 
 /** Fila de la sección de películas (Tendencias, En cines, géneros…). */
-data class TmdbRow(val id: String, val title: String, val path: String, val extra: String = "")
+data class TmdbRow(val id: String, val title: String, val path: String, val extra: String = "", val tv: Boolean = false)
 
 /**
  * Cliente de The Movie Database (TMDB). Solo trae información de las películas;
@@ -60,6 +67,21 @@ object Tmdb {
         TmdbRow("g16", "Animación", "discover/movie", "&with_genres=16&sort_by=popularity.desc"),
         TmdbRow("g10751", "En familia", "discover/movie", "&with_genres=10751&sort_by=popularity.desc"),
         TmdbRow("g18", "Drama", "discover/movie", "&with_genres=18&sort_by=popularity.desc"),
+    )
+
+    /** Filas de la sección Series. */
+    val tvRows = listOf(
+        TmdbRow("tv_trending", "Tendencias de la semana", "trending/tv/week", tv = true),
+        TmdbRow("tv_air", "En emisión", "tv/on_the_air", tv = true),
+        TmdbRow("tv_popular", "Populares", "tv/popular", tv = true),
+        TmdbRow("tv_top", "Mejor valoradas", "tv/top_rated", tv = true),
+        TmdbRow("tv_g10759", "Acción y aventura", "discover/tv", "&with_genres=10759&sort_by=popularity.desc", tv = true),
+        TmdbRow("tv_g35", "Comedia", "discover/tv", "&with_genres=35&sort_by=popularity.desc", tv = true),
+        TmdbRow("tv_g18", "Drama", "discover/tv", "&with_genres=18&sort_by=popularity.desc", tv = true),
+        TmdbRow("tv_g80", "Crimen", "discover/tv", "&with_genres=80&sort_by=popularity.desc", tv = true),
+        TmdbRow("tv_g10765", "Ciencia ficción y fantasía", "discover/tv", "&with_genres=10765&sort_by=popularity.desc", tv = true),
+        TmdbRow("tv_g16", "Animación", "discover/tv", "&with_genres=16&sort_by=popularity.desc", tv = true),
+        TmdbRow("tv_g10762", "Infantiles", "discover/tv", "&with_genres=10762&sort_by=popularity.desc", tv = true),
     )
 
     private var prefs: SharedPreferences? = null
@@ -126,48 +148,60 @@ object Tmdb {
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
     suspend fun list(row: TmdbRow, page: Int = 1): List<TmdbMovie> = withContext(Dispatchers.IO) {
-        parseList(get("${row.path}?language=$LANG&page=$page&include_adult=false${row.extra}"))
+        parseList(get("${row.path}?language=$LANG&page=$page&include_adult=false${row.extra}"), row.tv)
     }
 
+    /** Busca películas y series a la vez. */
     suspend fun search(query: String): List<TmdbMovie> = withContext(Dispatchers.IO) {
-        parseList(get("search/movie?language=$LANG&include_adult=false&query=" + enc(query)))
+        parseList(get("search/multi?language=$LANG&include_adult=false&query=" + enc(query)))
     }
 
-    suspend fun detail(id: Long): TmdbDetail = withContext(Dispatchers.IO) {
+    suspend fun detail(id: Long, tv: Boolean = false): TmdbDetail = withContext(Dispatchers.IO) {
+        val kind = if (tv) "tv" else "movie"
         parseDetail(
-            get("movie/$id?language=$LANG&append_to_response=videos,credits&include_video_language=es,en,null")
+            get("$kind/$id?language=$LANG&append_to_response=videos,credits&include_video_language=es,en,null"),
+            tv,
         )
     }
+
+    /** "Si te gustó, mira también". */
+    fun recommendationsRow(id: Long, tv: Boolean) =
+        TmdbRow("rec", "", (if (tv) "tv" else "movie") + "/$id/recommendations", tv = tv)
 
     // ---------- Lectura del JSON (separada para poder probarla) ----------
 
     fun image(path: String?, size: String): String? =
         path?.takeIf { it.isNotBlank() && it != "null" }?.let { IMG + size + it }
 
-    fun parseList(json: JSONObject): List<TmdbMovie> {
+    fun parseList(json: JSONObject, tv: Boolean = false): List<TmdbMovie> {
         val arr = json.optJSONArray("results") ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i -> parseMovie(arr.optJSONObject(i) ?: return@mapNotNull null) }
+        return (0 until arr.length()).mapNotNull { i -> parseMovie(arr.optJSONObject(i) ?: return@mapNotNull null, tv) }
             .filter { it.poster != null }
     }
 
-    fun parseMovie(o: JSONObject): TmdbMovie? {
+    /** Lee una película o una serie (las series usan "name" y "first_air_date"). */
+    fun parseMovie(o: JSONObject, forceTv: Boolean = false): TmdbMovie? {
+        val type = o.optString("media_type")
+        if (type == "person") return null
+        val tv = forceTv || type == "tv" || (!o.has("title") && o.has("name"))
         val id = o.optLong("id", -1)
-        val title = o.optString("title").takeIf { it.isNotBlank() } ?: return null
+        val title = o.optString(if (tv) "name" else "title").takeIf { it.isNotBlank() } ?: return null
         if (id <= 0) return null
         return TmdbMovie(
             id = id,
             title = title,
-            originalTitle = o.optString("original_title", title),
-            year = o.optString("release_date").take(4).toIntOrNull(),
+            originalTitle = o.optString(if (tv) "original_name" else "original_title", title),
+            year = o.optString(if (tv) "first_air_date" else "release_date").take(4).toIntOrNull(),
             overview = o.optString("overview"),
             poster = image(o.optString("poster_path"), "w342"),
             backdrop = image(o.optString("backdrop_path"), "w780"),
             rating = o.optDouble("vote_average", 0.0).let { if (it.isNaN()) 0.0 else it },
+            tv = tv,
         )
     }
 
-    fun parseDetail(o: JSONObject): TmdbDetail {
-        val movie = parseMovie(o) ?: throw TmdbException("No se encontró la película.")
+    fun parseDetail(o: JSONObject, tv: Boolean = false): TmdbDetail {
+        val movie = parseMovie(o, tv) ?: throw TmdbException(if (tv) "No se encontró la serie." else "No se encontró la película.")
         val genres = o.optJSONArray("genres")?.let { a ->
             (0 until a.length()).mapNotNull { a.optJSONObject(it)?.optString("name")?.takeIf { n -> n.isNotBlank() } }
         }.orEmpty()
@@ -179,13 +213,36 @@ object Tmdb {
                 TmdbPerson(name, c.optString("character"), image(c.optString("profile_path"), "w185"))
             }
         }.orEmpty()
-        val director = credits?.optJSONArray("crew")?.let { a ->
+        val director = if (tv) {
+            o.optJSONArray("created_by")?.let { a ->
+                (0 until a.length()).mapNotNull { a.optJSONObject(it)?.optString("name")?.takeIf { n -> n.isNotBlank() } }
+                    .take(2).joinToString(", ").ifBlank { null }
+            }
+        } else credits?.optJSONArray("crew")?.let { a ->
             (0 until a.length()).mapNotNull { a.optJSONObject(it) }
                 .firstOrNull { it.optString("job") == "Director" }?.optString("name")
         }
+        val runtime = if (tv) {
+            o.optJSONArray("episode_run_time")?.let { a -> (0 until a.length()).map { a.optInt(it) }.firstOrNull { it > 0 } }
+                ?: o.optJSONObject("last_episode_to_air")?.optInt("runtime", 0) ?: 0
+        } else o.optInt("runtime", 0)
+        val seasons = if (!tv) emptyList() else o.optJSONArray("seasons")?.let { a ->
+            (0 until a.length()).mapNotNull { a.optJSONObject(it) }
+                .filter { it.optInt("season_number", 0) > 0 }
+                .map {
+                    TmdbSeason(
+                        number = it.optInt("season_number"),
+                        name = it.optString("name").ifBlank { "Temporada ${it.optInt("season_number")}" },
+                        episodes = it.optInt("episode_count", 0),
+                        poster = image(it.optString("poster_path"), "w185"),
+                        year = it.optString("air_date").take(4).toIntOrNull(),
+                    )
+                }
+        }.orEmpty()
         return TmdbDetail(
             movie = movie,
-            runtimeMin = o.optInt("runtime", 0),
+            seasons = seasons,
+            runtimeMin = runtime,
             genres = genres,
             tagline = o.optString("tagline"),
             cast = cast,
@@ -246,7 +303,8 @@ object Tmdb {
         val t = norm(title)
         if (fakeWords.containsMatchIn(t) || fakeWords.containsMatchIn(norm(channel))) return true
         val recent = Regex("\\b(${currentYear}|${currentYear - 1})\\b")
-        return recent.containsMatchIn(t) && Regex("pelicula completa|full movie").containsMatchIn(t)
+        return recent.containsMatchIn(t) &&
+            Regex("pelicula completa|full movie|capitulo completo|episodio completo|full episode").containsMatchIn(t)
     }
 
     /** ¿Este video de YouTube parece de verdad la película completa? */

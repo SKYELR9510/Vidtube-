@@ -183,6 +183,33 @@ object Repository {
         found.values.toList()
     }
 
+    /**
+     * Capítulos completos de una serie en YouTube para una temporada. Mismo cuidado que con
+     * las películas: título de la serie, duración parecida a la de un capítulo y sin reseñas.
+     */
+    suspend fun seriesEpisodes(show: TmdbMovie, season: Int, episodeMin: Int): List<VideoItem> = withContext(Dispatchers.IO) {
+        if (!Tmdb.mayBeFreeOnYoutube(show)) return@withContext emptyList()
+        val epSec = if (episodeMin > 0) episodeMin * 60L else 0L
+        val minSec = if (epSec > 0) (epSec * 0.7).toLong() else 1200L
+        val queries = buildList {
+            add("${show.title} temporada $season capítulo completo")
+            if (Tmdb.norm(show.originalTitle) != Tmdb.norm(show.title)) add("${show.originalTitle} season $season full episode")
+        }
+        val found = LinkedHashMap<String, VideoItem>()
+        for (q in queries) {
+            val r = runCatching { categorySearch(q, minSec = minSec, noTrailers = true) }.getOrNull() ?: continue
+            r.items.filterIsInstance<FeedEntry.Video>().map { it.video }
+                .filter { v ->
+                    Tmdb.matches(v.title, show) && !Tmdb.looksFake(v.title, v.channelName) &&
+                        // Un capítulo no dura el triple de lo normal (eso son recopilaciones o películas)
+                        (epSec == 0L || v.durationSec <= epSec * 3)
+                }
+                .forEach { found.putIfAbsent(it.url, it) }
+            if (found.size >= 10) break
+        }
+        found.values.toList()
+    }
+
     // ---------- Shorts ----------
     /** Shorts sobre un tema (búsqueda con #shorts). */
     suspend fun shortsSearch(query: String): List<VideoItem> = withContext(Dispatchers.IO) {

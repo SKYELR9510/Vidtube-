@@ -65,30 +65,42 @@ class MoviesViewModel : ViewModel() {
     val rows = mutableStateMapOf<String, List<TmdbMovie>>()
     var error by mutableStateOf<String?>(null)
     var loading by mutableStateOf(false)
-    private var loadedToken: String? = null
+    private val loadedToken = HashMap<Boolean, String>()
 
-    fun load(force: Boolean = false) {
+    /** Carga las filas de películas (tv = false) o de series (tv = true). */
+    fun load(tv: Boolean = false, force: Boolean = false) {
         val token = Tmdb.userToken.value + "|" + Tmdb.hasBuiltInToken()
         if (!Tmdb.isConfigured() || loading) return
-        if (!force && loadedToken == token && rows.isNotEmpty()) return
-        loadedToken = token
+        val list = if (tv) Tmdb.tvRows else Tmdb.rows
+        val have = list.any { rows.containsKey(it.id) }
+        if (!force && loadedToken[tv] == token && have) return
+        loadedToken[tv] = token
         loading = true
         error = null
         viewModelScope.launch {
-            for (row in Tmdb.rows) {
+            var any = false
+            for (row in list) {
                 runCatching { Tmdb.list(row) }
-                    .onSuccess { rows[row.id] = it }
-                    .onFailure { e -> if (rows.isEmpty()) error = e.message ?: "No se pudo cargar TMDB." }
+                    .onSuccess { rows[row.id] = it; any = true }
+                    .onFailure { e -> if (!any) error = e.message ?: "No se pudo cargar TMDB." }
                 // Si la clave es mala no tiene sentido seguir pidiendo filas
-                if (error != null && rows.isEmpty()) break
+                if (error != null && !any) break
             }
+            if (any) error = null
             loading = false
         }
     }
 }
 
-/** Encabezado de la categoría Películas: filas de pósters de TMDB. */
-fun LazyListScope.movieRows(vm: MoviesViewModel, onMovie: (Long) -> Unit, onSettings: () -> Unit) {
+/** Encabezado de Películas o Series: filas de pósters de TMDB. */
+fun LazyListScope.movieRows(
+    vm: MoviesViewModel,
+    onMovie: (Long, Boolean) -> Unit,
+    onSettings: () -> Unit,
+    tv: Boolean = false,
+) {
+    val tmdbRows = if (tv) Tmdb.tvRows else Tmdb.rows
+    val hasRows = tmdbRows.any { !vm.rows[it.id].isNullOrEmpty() }
     if (!Tmdb.isConfigured()) {
         item("tmdb_setup") {
             Row(
@@ -101,7 +113,7 @@ fun LazyListScope.movieRows(vm: MoviesViewModel, onMovie: (Long) -> Unit, onSett
                 Icon(Icons.Outlined.Movie, null, tint = VColors.Coral, modifier = Modifier.size(28.dp))
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Activa los pósters y fichas de películas", color = VColors.Text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(if (tv) "Activa los pósters y fichas de series" else "Activa los pósters y fichas de películas", color = VColors.Text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text("Pega tu clave gratuita de TMDB en Configuración.", color = VColors.Secondary, fontSize = 12.sp)
                 }
             }
@@ -109,7 +121,7 @@ fun LazyListScope.movieRows(vm: MoviesViewModel, onMovie: (Long) -> Unit, onSett
         return
     }
     val err = vm.error
-    if (err != null && vm.rows.isEmpty()) {
+    if (err != null && !hasRows) {
         item("tmdb_error") {
             Text(
                 "$err Toca para revisar la clave.",
@@ -119,14 +131,14 @@ fun LazyListScope.movieRows(vm: MoviesViewModel, onMovie: (Long) -> Unit, onSett
         }
         return
     }
-    if (vm.rows.isEmpty() && vm.loading) {
+    if (!hasRows && vm.loading) {
         item("tmdb_loading") {
             Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = VColors.Coral, strokeWidth = 3.dp)
             }
         }
     }
-    for (row in Tmdb.rows) {
+    for (row in tmdbRows) {
         val list = vm.rows[row.id].orEmpty()
         if (list.isEmpty()) continue
         item("tmdb_t_" + row.id) { SectionTitle(row.title) }
@@ -135,12 +147,14 @@ fun LazyListScope.movieRows(vm: MoviesViewModel, onMovie: (Long) -> Unit, onSett
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(list, key = { it.id }) { m -> PosterCard(m) { onMovie(m.id) } }
+                items(list, key = { it.id }) { m -> PosterCard(m) { onMovie(m.id, m.tv) } }
             }
         }
     }
-    if (vm.rows.isNotEmpty()) {
-        item("tmdb_yt_title") { SectionTitle("Películas completas gratis en YouTube") }
+    if (hasRows) {
+        item("tmdb_yt_title") {
+            SectionTitle(if (tv) "Series completas gratis en YouTube" else "Películas completas gratis en YouTube")
+        }
     }
 }
 
@@ -174,28 +188,41 @@ private fun RatingBadge(rating: Double, modifier: Modifier = Modifier) {
     }
 }
 
-/** Ficha de una película: datos de TMDB + tráiler y película completa desde YouTube. */
+/** Ficha de una película o serie: datos de TMDB + tráiler y lo que haya gratis en YouTube. */
 @Composable
-fun MovieScreen(id: Long, onBack: () -> Unit, onVideo: (VideoItem) -> Unit, onMovie: (Long) -> Unit) {
+fun MovieScreen(
+    id: Long,
+    onBack: () -> Unit,
+    onVideo: (VideoItem) -> Unit,
+    onMovie: (Long, Boolean) -> Unit,
+    tv: Boolean = false,
+) {
     var detail by remember(id) { mutableStateOf<TmdbDetail?>(null) }
     var error by remember(id) { mutableStateOf<String?>(null) }
     var full by remember(id) { mutableStateOf<List<VideoItem>?>(null) }
     var similar by remember(id) { mutableStateOf<List<TmdbMovie>>(emptyList()) }
     var attempt by remember(id) { mutableStateOf(0) }
+    // Series: temporada elegida (los capítulos se buscan por temporada)
+    var season by remember(id) { mutableStateOf(1) }
 
     LaunchedEffect(id, attempt) {
         error = null
-        runCatching { Tmdb.detail(id) }
+        runCatching { Tmdb.detail(id, tv) }
             .onSuccess { d ->
                 detail = d
-                full = runCatching { Repository.fullMovie(d.movie, d.runtimeMin) }.getOrDefault(emptyList())
+                if (!tv) full = runCatching { Repository.fullMovie(d.movie, d.runtimeMin) }.getOrDefault(emptyList())
+                else season = d.seasons.firstOrNull()?.number ?: 1
             }
-            .onFailure { error = it.message ?: "No se pudo cargar la película." }
+            .onFailure { error = it.message ?: if (tv) "No se pudo cargar la serie." else "No se pudo cargar la película." }
+    }
+    LaunchedEffect(id, season, detail) {
+        val d = detail ?: return@LaunchedEffect
+        if (!tv) return@LaunchedEffect
+        full = null
+        full = runCatching { Repository.seriesEpisodes(d.movie, season, d.runtimeMin) }.getOrDefault(emptyList())
     }
     LaunchedEffect(id) {
-        similar = runCatching {
-            Tmdb.list(com.silva.vidtube.data.TmdbRow("sim", "", "movie/$id/recommendations"))
-        }.getOrDefault(emptyList()).take(15)
+        similar = runCatching { Tmdb.list(Tmdb.recommendationsRow(id, tv)) }.getOrDefault(emptyList()).take(15)
     }
 
     Box(Modifier.fillMaxSize().background(VColors.Background)) {
@@ -215,7 +242,7 @@ fun MovieScreen(id: Long, onBack: () -> Unit, onVideo: (VideoItem) -> Unit, onMo
                         val first = full?.firstOrNull()
                         PillButton(
                             when {
-                                first != null -> "Ver película"
+                                first != null -> if (tv) "Ver capítulo" else "Ver película"
                                 !Tmdb.mayBeFreeOnYoutube(d.movie) -> "Aún no está gratis"
                                 full == null -> "Buscando…"
                                 else -> "No disponible gratis"
@@ -239,7 +266,7 @@ fun MovieScreen(id: Long, onBack: () -> Unit, onVideo: (VideoItem) -> Unit, onMo
                             Text(d.movie.overview, color = VColors.Secondary, fontSize = 14.sp, lineHeight = 20.sp)
                             d.director?.let {
                                 Spacer(Modifier.height(8.dp))
-                                Text("Dirección: $it", color = VColors.Text, fontSize = 13.sp)
+                                Text((if (tv) "Creada por: " else "Dirección: ") + it, color = VColors.Text, fontSize = 13.sp)
                             }
                         }
                     }
@@ -263,17 +290,35 @@ fun MovieScreen(id: Long, onBack: () -> Unit, onVideo: (VideoItem) -> Unit, onMo
                         }
                     }
                 }
-                item("full_t") { SectionTitle("En YouTube") }
+                item("full_t") { SectionTitle(if (tv) "Capítulos en YouTube" else "En YouTube") }
+                if (tv && d.seasons.size > 1) {
+                    item("seasons") {
+                        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(d.seasons, key = { it.number }) { s ->
+                                CategoryChip(
+                                    "T${s.number}" + (if (s.episodes > 0) " · ${s.episodes} cap." else ""),
+                                    null, s.number == season,
+                                ) { season = s.number }
+                            }
+                        }
+                    }
+                }
                 val f = full
                 when {
                     f == null -> item("full_loading") {
-                        Text("Buscando la película completa en YouTube…", color = VColors.Secondary, fontSize = 13.sp,
+                        Text(if (tv) "Buscando capítulos de la temporada $season en YouTube…" else "Buscando la película completa en YouTube…", color = VColors.Secondary, fontSize = 13.sp,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     }
                     f.isEmpty() -> item("full_none") {
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                             Text(
-                                if (!Tmdb.mayBeFreeOnYoutube(d.movie))
+                                if (tv && !Tmdb.mayBeFreeOnYoutube(d.movie))
+                                    "Es una serie reciente: está en plataformas de pago, así que sus capítulos no están gratis " +
+                                        "en YouTube. Los videos que dicen «capítulo completo» son resúmenes o engaños. Mira el tráiler."
+                                else if (tv)
+                                    "No encontramos capítulos completos y gratis de la temporada $season en YouTube " +
+                                        "(descartamos reseñas, resúmenes y fragmentos)."
+                                else if (!Tmdb.mayBeFreeOnYoutube(d.movie))
                                     "Es un estreno reciente: todavía está en cines o en plataformas de pago, así que no " +
                                         "está gratis en YouTube. Los videos que dicen «película completa» son reseñas o engaños. " +
                                         "Mira el tráiler mientras tanto."
@@ -285,20 +330,20 @@ fun MovieScreen(id: Long, onBack: () -> Unit, onVideo: (VideoItem) -> Unit, onMo
                         }
                     }
                     else -> items(f, key = { "full:" + it.url }) { v ->
-                        VideoCard(v, onClick = { onVideo(v) }, onChannel = {}, reason = "Duración completa · ${v.channelName}")
+                        VideoCard(v, onClick = { onVideo(v) }, onChannel = {}, reason = (if (tv) "Capítulo completo · " else "Duración completa · ") + v.channelName)
                     }
                 }
                 if (similar.isNotEmpty()) {
                     item("sim_t") { SectionTitle("Si te gustó, mira también") }
                     item("sim") {
                         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            items(similar, key = { it.id }) { m -> PosterCard(m) { onMovie(m.id) } }
+                            items(similar, key = { it.id }) { m -> PosterCard(m) { onMovie(m.id, m.tv) } }
                         }
                     }
                 }
                 item("credit") {
                     Text(
-                        "Datos e imágenes de películas: TMDB. Esta app usa la API de TMDB pero no está avalada ni certificada por TMDB.",
+                        "Datos e imágenes de películas y series: TMDB. Esta app usa la API de TMDB pero no está avalada ni certificada por TMDB.",
                         color = VColors.Muted, fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp).navigationBarsPadding(),
                     )
@@ -343,7 +388,8 @@ private fun MovieHero(d: TmdbDetail) {
             Spacer(Modifier.height(6.dp))
             val meta = listOfNotNull(
                 m.year?.toString(),
-                d.runtimeMin.takeIf { it > 0 }?.let { if (it >= 60) "${it / 60} h ${it % 60} min" else "$it min" },
+                if (m.tv) d.seasons.size.takeIf { it > 0 }?.let { if (it == 1) "1 temporada" else "$it temporadas" }
+                else d.runtimeMin.takeIf { it > 0 }?.let { if (it >= 60) "${it / 60} h ${it % 60} min" else "$it min" },
                 d.genres.take(2).joinToString(", ").ifBlank { null },
             ).joinToString(" · ")
             Text(meta, color = VColors.Secondary, fontSize = 13.sp)

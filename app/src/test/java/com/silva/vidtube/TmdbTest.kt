@@ -96,4 +96,39 @@ class TmdbTest {
         assertFalse(Tmdb.looksLikeFullMovie("Matrix película completa en español", "Cine Clásico", runtime / 2, runtime, m))
         assertFalse(Tmdb.looksLikeFullMovie("Matrix reseña completa", "Cine Clásico", runtime, runtime, m))
     }
+
+    @Test
+    fun leeSeriesConTemporadasYCreadores() {
+        val list = Tmdb.parseList(JSONObject("""{"results":[
+            {"id":1396,"name":"Breaking Bad","original_name":"Breaking Bad","first_air_date":"2008-01-20","poster_path":"/bb.jpg","vote_average":8.9}
+        ]}"""), tv = true)
+        assertEquals(1, list.size)
+        assertTrue(list[0].tv)
+        assertEquals("Breaking Bad", list[0].title)
+        assertEquals(2008, list[0].year)
+
+        val d = Tmdb.parseDetail(JSONObject("""
+            {"id":1396,"name":"Breaking Bad","first_air_date":"2008-01-20","poster_path":"/bb.jpg",
+             "episode_run_time":[47],"created_by":[{"name":"Vince Gilligan"}],
+             "seasons":[{"season_number":0,"name":"Especiales","episode_count":9},
+                        {"season_number":1,"name":"Temporada 1","episode_count":7,"air_date":"2008-01-20"},
+                        {"season_number":2,"name":"Temporada 2","episode_count":13,"air_date":"2009-03-08"}]}
+        """.trimIndent()), tv = true)
+        assertEquals(47, d.runtimeMin)
+        assertEquals("Vince Gilligan", d.director)
+        assertEquals(listOf(1, 2), d.seasons.map { it.number })
+        assertEquals(13, d.seasons[1].episodes)
+    }
+
+    @Test
+    fun busquedaMixtaIgnoraPersonas() {
+        val list = Tmdb.parseList(JSONObject("""{"results":[
+            {"id":5,"media_type":"person","name":"Keanu Reeves","profile_path":"/k.jpg"},
+            {"id":603,"media_type":"movie","title":"Matrix","poster_path":"/m.jpg"},
+            {"id":1396,"media_type":"tv","name":"Breaking Bad","poster_path":"/bb.jpg"}
+        ]}"""))
+        assertEquals(listOf(603L, 1396L), list.map { it.id })
+        assertFalse(list[0].tv)
+        assertTrue(list[1].tv)
+    }
 }
