@@ -8,7 +8,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** Enlace que el usuario agregó a una película o serie (se guarda solo en este celular). */
-data class UserLink(val name: String, val url: String) {
+data class UserLink(val name: String, val url: String, val fromPanel: Boolean = false) {
     /** Tipo de enlace, para saber cómo abrirlo. */
     val kind: Kind get() = UserLinks.kindOf(url)
 

@@ -1,5 +1,6 @@
 package com.silva.vidtube
 
+import kotlinx.coroutines.launch
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -35,6 +36,11 @@ class VidtubeApp : Application() {
         Library.init(this)
         com.silva.vidtube.data.Tmdb.init(this)
         com.silva.vidtube.data.UserLinks.init(this)
+        com.silva.vidtube.data.PanelLinks.init(this)
+        // Enlaces del panel web: se actualizan al abrir la app
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
+            com.silva.vidtube.data.PanelLinks.refresh()
+        }
         com.silva.vidtube.download.Downloads.init(this)
 
         val channel = NotificationChannel(

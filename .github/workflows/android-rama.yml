@@ -41,6 +41,8 @@ jobs:
         env:
           VIDTUBE_STORE_PASSWORD: ${{ secrets.VIDTUBE_STORE_PASSWORD }}
           VIDTUBE_TMDB_TOKEN: ${{ secrets.VIDTUBE_TMDB_TOKEN }}
+          VIDTUBE_PANEL_URL: ${{ secrets.VIDTUBE_PANEL_URL }}
+          VIDTUBE_PANEL_KEY: ${{ secrets.VIDTUBE_PANEL_KEY }}
           VIDTUBE_KEY_ALIAS: ${{ secrets.VIDTUBE_KEY_ALIAS || 'vidtube' }}
           VIDTUBE_KEY_PASSWORD: ${{ secrets.VIDTUBE_KEY_PASSWORD || secrets.VIDTUBE_STORE_PASSWORD }}
         run: |

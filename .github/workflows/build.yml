@@ -58,6 +58,8 @@ jobs:
         env:
           VIDTUBE_STORE_PASSWORD: ${{ secrets.VIDTUBE_STORE_PASSWORD }}
           VIDTUBE_TMDB_TOKEN: ${{ secrets.VIDTUBE_TMDB_TOKEN }}
+          VIDTUBE_PANEL_URL: ${{ secrets.VIDTUBE_PANEL_URL }}
+          VIDTUBE_PANEL_KEY: ${{ secrets.VIDTUBE_PANEL_KEY }}
           # El alias y la contraseña de la clave son opcionales: si no existen se usan
           # "vidtube" y la misma contraseña del almacén.
           VIDTUBE_KEY_ALIAS: ${{ secrets.VIDTUBE_KEY_ALIAS || 'vidtube' }}

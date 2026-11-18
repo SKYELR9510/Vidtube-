@@ -29,6 +29,12 @@ android {
         val tmdb = (System.getenv("VIDTUBE_TMDB_TOKEN") ?: (project.findProperty("tmdbToken") as String?) ?: "")
             .trim().replace("\"", "")
         buildConfigField("String", "TMDB_TOKEN", "\"$tmdb\"")
+
+        // Panel web de enlaces (secretos VIDTUBE_PANEL_URL y VIDTUBE_PANEL_KEY en GitHub).
+        // Si faltan, se configura en la app: Configuración → Panel de enlaces.
+        fun clean(v: String?) = (v ?: "").trim().replace("\"", "").replace("\\", "")
+        buildConfigField("String", "PANEL_URL", "\"${clean(System.getenv("VIDTUBE_PANEL_URL") ?: project.findProperty("panelUrl") as String?)}\"")
+        buildConfigField("String", "PANEL_KEY", "\"${clean(System.getenv("VIDTUBE_PANEL_KEY") ?: project.findProperty("panelKey") as String?)}\"")
     }
 
     // Clave de firma fija: la misma en tu PC y en GitHub, para que las actualizaciones

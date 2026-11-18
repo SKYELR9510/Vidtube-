@@ -56,6 +56,9 @@ fun SettingsScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
     var qualityDialog by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var tmdbDialog by remember { mutableStateOf(false) }
+    var panelDialog by remember { mutableStateOf(false) }
+    val panelStatus by com.silva.vidtube.data.PanelLinks.status.collectAsState()
+    val panelSettings by com.silva.vidtube.data.PanelLinks.settings.collectAsState()
     val tmdbUser by com.silva.vidtube.data.Tmdb.userToken.collectAsState()
 
     Column(Modifier.fillMaxSize().background(VColors.Background)) {
@@ -93,6 +96,11 @@ fun SettingsScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
                         else -> "Sin configurar · toca para pegar tu clave de themoviedb.org"
                     },
                 ) { tmdbDialog = true }
+                MenuRow(
+                    Icons.Outlined.Movie, "Panel de enlaces",
+                    panelStatus ?: if (com.silva.vidtube.data.PanelLinks.isConfigured()) "Configurado" else
+                        "Sin configurar · conecta tu panel web para tener tus enlaces siempre",
+                ) { panelDialog = true }
             }
             Group("Descargas") {
                 MenuRow(Icons.Outlined.Download, "Mis descargas", "Se guardan en Descargas/Vidtube", onDownloads)
@@ -126,6 +134,44 @@ fun SettingsScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
             }
             Spacer(Modifier.height(28.dp))
         }
+    }
+
+    if (panelDialog) {
+        var url by remember { mutableStateOf(panelSettings.first) }
+        var key by remember { mutableStateOf(panelSettings.second) }
+        var testing by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { panelDialog = false },
+            title = { Text("Panel de enlaces") },
+            text = {
+                Column {
+                    Text(
+                        "Dirección de tu panel (https://…/vidtube-panel/) y la clave «api_key» de su config.php." +
+                            if (com.silva.vidtube.data.PanelLinks.hasBuiltIn()) " Ya viene configurado en la app; solo llénalo para cambiarlo." else "",
+                        color = VColors.Secondary, fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = url, onValueChange = { url = it.trim() }, singleLine = true,
+                        label = { Text("Dirección del panel") }, placeholder = { Text("https://…") }, modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = key, onValueChange = { key = it.trim() }, singleLine = true,
+                        label = { Text("Clave") }, modifier = Modifier.fillMaxWidth(),
+                    )
+                    panelStatus?.let { Text(it, color = VColors.Secondary, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)) }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(enabled = !testing, onClick = {
+                    com.silva.vidtube.data.PanelLinks.save(url, key)
+                    testing = true
+                    scope.launch { com.silva.vidtube.data.PanelLinks.refresh(force = true); testing = false }
+                }) { Text(if (testing) "Probando…" else "Guardar y probar", color = VColors.Coral) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { panelDialog = false }) { Text("Cerrar") } },
+        )
     }
 
     if (tmdbDialog) {

@@ -143,6 +143,19 @@ fun LazyListScope.movieRows(
             }
         }
     }
+    // Títulos con enlaces en tu panel web
+    item("panel_row_" + tv) {
+        val panel by com.silva.vidtube.data.PanelLinks.titles.collectAsState()
+        val mine = panel.filter { it.tv == tv }
+        if (mine.isNotEmpty()) {
+            Column {
+                SectionTitle("En tu panel", subtitle = "${mine.size} " + (if (tv) "series" else "películas") + " con tus enlaces")
+                LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(mine, key = { "p" + it.tmdbId }) { t -> PosterCard(t.asMovie()) { onMovie(t.tmdbId, t.tv) } }
+                }
+            }
+        }
+    }
     for (row in tmdbRows) {
         val list = vm.rows[row.id].orEmpty()
         if (list.isEmpty()) continue
@@ -216,7 +229,11 @@ fun MovieScreen(
     // Enlaces que agregó el usuario a este título (solo en este celular)
     val linkKey = com.silva.vidtube.data.UserLinks.key(id, tv)
     val allLinks by com.silva.vidtube.data.UserLinks.all.collectAsState()
-    val myLinks = allLinks[linkKey].orEmpty()
+    // Primero los del panel web (siempre disponibles), después los de este celular
+    val panelTitles by com.silva.vidtube.data.PanelLinks.titles.collectAsState()
+    val panelLinks = panelTitles.firstOrNull { it.tmdbId == id && it.tv == tv }?.links.orEmpty()
+    val myLinks = panelLinks + allLinks[linkKey].orEmpty().filter { l -> panelLinks.none { it.url == l.url } }
+    LaunchedEffect(id) { com.silva.vidtube.data.PanelLinks.refresh() }
     var addLink by remember(id) { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -297,7 +314,7 @@ fun MovieScreen(
                 }
                 item("mylinks") {
                     MyLinks(myLinks, onOpen = { l -> openUserLink(context, l, d.movie, onVideo, onWeb) },
-                        onRemove = { l -> com.silva.vidtube.data.UserLinks.remove(linkKey, l) }, onAdd = { addLink = true })
+                        onRemove = { l -> if (!l.fromPanel) com.silva.vidtube.data.UserLinks.remove(linkKey, l) }, onAdd = { addLink = true })
                 }
                 d.watch?.let { w ->
                     item("watch") { WhereToWatch(w, d.movie.title) }
@@ -605,7 +622,7 @@ private fun MyLinks(
                 Column(Modifier.weight(1f)) {
                     Text(l.name, color = VColors.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        when (l.kind) {
+                        (if (l.fromPanel) "Del panel · " else "") + when (l.kind) {
                             com.silva.vidtube.data.UserLink.Kind.YOUTUBE -> "YouTube · se ve en Vidtube"
                             com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · en el reproductor de Vidtube"
                             else -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · página, se abre dentro de Vidtube"
@@ -613,8 +630,10 @@ private fun MyLinks(
                         color = VColors.Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
-                androidx.compose.material3.IconButton(onClick = { onRemove(l) }) {
-                    Icon(Icons.Outlined.Close, "Quitar enlace", tint = VColors.Muted)
+                if (!l.fromPanel) {
+                    androidx.compose.material3.IconButton(onClick = { onRemove(l) }) {
+                        Icon(Icons.Outlined.Close, "Quitar enlace", tint = VColors.Muted)
+                    }
                 }
             }
         }
