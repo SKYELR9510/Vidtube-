@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.SportsSoccer
 import androidx.compose.material.icons.outlined.Newspaper
+import androidx.compose.material.icons.outlined.LiveTv
 import androidx.compose.material.icons.outlined.ChildCare
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.Flight
@@ -147,6 +148,7 @@ fun SearchScreen(
     onChannel: (String) -> Unit,
     onMovie: (Long, Boolean) -> Unit = { _, _ -> },
     onSettings: () -> Unit = {},
+    onTv: () -> Unit = {},
     vm: SearchViewModel = viewModel(),
     moviesVm: MoviesViewModel = viewModel(),
 ) {
@@ -225,7 +227,8 @@ fun SearchScreen(
                             row.forEach { cat ->
                                 CategoryTile(cat, Modifier.weight(1f)) {
                                     keyboard?.hide()
-                                    if (cat.chip != null) vm.openCategory(cat.label, cat.chip) else vm.submit(cat.query)
+                                    if (cat.chip == "tv") onTv()
+                                    else if (cat.chip != null) vm.openCategory(cat.label, cat.chip) else vm.submit(cat.query)
                                 }
                             }
                         }
@@ -333,6 +336,7 @@ private val searchCategories = listOf(
     SearchCategory("Conciertos", "concierto en vivo completo", Icons.Outlined.Mic, 0xFF8A1F6E, 0xFF2B0A22, chip = "c:conciertos"),
     SearchCategory("Videojuegos", "videojuegos gameplay", Icons.Outlined.SportsEsports, 0xFF2346B8, 0xFF0B1640),
     SearchCategory("Deportes", "deportes resumen", Icons.Outlined.SportsSoccer, 0xFF1F8A4C, 0xFF0A2E19, chip = "c:deportes"),
+    SearchCategory("TV abierta", "tv en vivo", Icons.Outlined.LiveTv, 0xFFD7263D, 0xFF3A0A12, chip = "tv"),
     SearchCategory("Noticias", "noticias hoy", Icons.Outlined.Newspaper, 0xFFB5462A, 0xFF3A130A, chip = "c:noticias"),
     SearchCategory("Infantil", "canciones infantiles", Icons.Outlined.ChildCare, 0xFFE0912B, 0xFF4A2A06, chip = "c:infantil"),
     SearchCategory("Ciencia y tecnología", "ciencia y tecnología", Icons.Outlined.Science, 0xFF1B8FA6, 0xFF06303A),

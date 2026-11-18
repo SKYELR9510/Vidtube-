@@ -23,6 +23,9 @@ data class PanelTitle(
     fun asMovie() = TmdbMovie(tmdbId, title, title, year, "", poster, null, 0.0, tv)
 }
 
+/** Canal de TV agregado en el panel (enlace de su señal en vivo). */
+data class PanelChannel(val name: String, val url: String, val logo: String?)
+
 /**
  * Enlaces del panel web (PHP en tu hosting). La app solo los lee con la clave;
  * se guardan en el celular para que funcionen sin conexión al panel.
@@ -31,6 +34,9 @@ object PanelLinks {
     private var prefs: SharedPreferences? = null
     private val _titles = MutableStateFlow<List<PanelTitle>>(emptyList())
     val titles: StateFlow<List<PanelTitle>> = _titles
+    private val _channels = MutableStateFlow<List<PanelChannel>>(emptyList())
+    /** Canales de TV del panel. */
+    val channels: StateFlow<List<PanelChannel>> = _channels
     private val _status = MutableStateFlow<String?>(null)
     /** Último resultado de la sincronización (para Configuración). */
     val status: StateFlow<String?> = _status
@@ -42,7 +48,9 @@ object PanelLinks {
     fun init(context: Context) {
         prefs = context.getSharedPreferences("vidtube_panel", Context.MODE_PRIVATE)
         _settings.value = (prefs?.getString("url", "") ?: "") to (prefs?.getString("key", "") ?: "")
-        prefs?.getString("cache", null)?.let { runCatching { _titles.value = parse(JSONObject(it)) } }
+        prefs?.getString("cache", null)?.let {
+            runCatching { val o = JSONObject(it); _titles.value = parse(o); _channels.value = parseChannels(o) }
+        }
     }
 
     private val builtInUrl get() = runCatching { com.silva.vidtube.BuildConfig.PANEL_URL }.getOrDefault("")
@@ -85,8 +93,10 @@ object PanelLinks {
                 when (val code = conn.responseCode) {
                     200 -> {
                         val body = conn.inputStream.bufferedReader().use { it.readText() }
-                        val list = parse(JSONObject(body))
+                        val json = JSONObject(body)
+                        val list = parse(json)
                         _titles.value = list
+                        _channels.value = parseChannels(json)
                         prefs?.edit()?.putString("cache", body)?.apply()
                         lastFetch = System.currentTimeMillis()
                         _status.value = "Conectado · ${list.sumOf { it.links.size }} enlaces en ${list.size} títulos"
@@ -100,6 +110,16 @@ object PanelLinks {
         } catch (e: Exception) {
             _status.value = "No se pudo conectar con el panel (${e.javaClass.simpleName})"
             false
+        }
+    }
+
+    fun parseChannels(o: JSONObject): List<PanelChannel> {
+        val arr = o.optJSONArray("channels") ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val c = arr.optJSONObject(i) ?: return@mapNotNull null
+            val url = UserLinks.normalize(c.optString("url")) ?: return@mapNotNull null
+            val name = c.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            PanelChannel(name, url, c.optString("logo").takeIf { it.startsWith("https://") })
         }
     }
 

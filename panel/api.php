@@ -31,5 +31,10 @@ foreach ($rows as $r) {
     $titles[$k]['links'][] = ['name' => $r['name'], 'url' => $r['url']];
     if ($r['updated_at'] > $version) $version = $r['updated_at'];
 }
-echo json_encode(['version' => $version, 'count' => count($rows), 'titles' => array_values($titles)],
+$channels = [];
+foreach (db()->query('SELECT name, url, logo, updated_at FROM vt_channels ORDER BY position, name')->fetchAll() as $ch) {
+    $channels[] = ['name' => $ch['name'], 'url' => $ch['url'], 'logo' => $ch['logo']];
+    if ($ch['updated_at'] > $version) $version = $ch['updated_at'];
+}
+echo json_encode(['version' => $version, 'count' => count($rows), 'titles' => array_values($titles), 'channels' => $channels],
     JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

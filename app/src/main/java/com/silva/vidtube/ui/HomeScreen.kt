@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Newspaper
 import androidx.compose.material.icons.outlined.Podcasts
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.Sensors
+import androidx.compose.material.icons.outlined.LiveTv
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.SportsSoccer
 import androidx.compose.material.icons.outlined.Tv
@@ -89,6 +90,7 @@ private val fixedChips = listOf(
     HomeChip("trending_gaming", "Videojuegos", Icons.Outlined.SportsEsports),
     HomeChip("c:infantil", "Infantil", Icons.Outlined.ChildCare),
     HomeChip("c:tecnologia", "Tecnología", Icons.Outlined.Memory),
+    HomeChip("tvabierta", "TV abierta", Icons.Outlined.LiveTv),
     HomeChip("live", "En vivo", Icons.Outlined.Sensors),
     HomeChip("trending_podcasts_episodes", "Podcasts", Icons.Outlined.Podcasts),
 )
@@ -121,6 +123,7 @@ fun buildHomeChips(): List<HomeChip> =
 
 /** Contenido de una categoría del Inicio (todas menos "Todo"). */
 suspend fun loadChip(id: String): PagedResult = when {
+    id == "tvabierta" -> PagedResult(emptyList(), null)
     id.startsWith("i:") -> Repository.freshSearch(id.removePrefix("i:"))
     id == "subs" -> PagedResult(
         Repository.subscriptionFeed(Library.subscriptions.value.take(60))
@@ -295,6 +298,11 @@ fun HomeScreen(
                 }
                 if (featured) item("feed_title") { SectionTitle("Para ti") }
             }
+        }
+        // TV abierta: canales en vivo en vez de la lista de videos
+        if (vm.selected == "tvabierta") {
+            TvContent(onVideo)
+            return@Column
         }
         PullToRefreshBox(
             isRefreshing = paged.refreshing,

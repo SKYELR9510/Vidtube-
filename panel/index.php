@@ -37,6 +37,34 @@ if ($action === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ---------- Acciones del panel (solo con sesión) ----------
+// ---------- Canales de TV ----------
+if (logged_in() && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, ['ch_add', 'ch_edit', 'ch_delete'], true)) {
+    check_csrf();
+    $pdo = db();
+    if ($action === 'ch_delete') {
+        $pdo->prepare('DELETE FROM vt_channels WHERE id = ?')->execute([(int)($_POST['id'] ?? 0)]);
+        $msg = 'Canal borrado.';
+    } else {
+        $name = trim(mb_substr((string)($_POST['name'] ?? ''), 0, 80));
+        $url = clean_url((string)($_POST['url'] ?? ''));
+        $logoRaw = trim((string)($_POST['logo'] ?? ''));
+        $logo = $logoRaw === '' ? null : clean_url($logoRaw);
+        $pos = (int)($_POST['position'] ?? 0);
+        if ($name === '') $err = 'Escribe el nombre del canal.';
+        elseif ($url === null) $err = 'El enlace de la señal debe empezar con https:// o http://';
+        elseif ($logoRaw !== '' && ($logo === null || !str_starts_with($logo, 'https://'))) $err = 'El logo debe ser un enlace https:// a una imagen.';
+        elseif ($action === 'ch_add') {
+            $pdo->prepare('INSERT INTO vt_channels (name, url, logo, position, created_at, updated_at) VALUES (?,?,?,?,?,?)')
+                ->execute([$name, $url, $logo, $pos, now(), now()]);
+            $msg = "Canal «{$name}» agregado.";
+        } else {
+            $pdo->prepare('UPDATE vt_channels SET name = ?, url = ?, logo = ?, position = ?, updated_at = ? WHERE id = ?')
+                ->execute([$name, $url, $logo, $pos, now(), (int)($_POST['id'] ?? 0)]);
+            $msg = 'Canal actualizado.';
+        }
+    }
+}
+
 if (logged_in() && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, ['add', 'edit', 'delete'], true)) {
     check_csrf();
     $pdo = db();
@@ -101,6 +129,8 @@ button.ghost{background:transparent;border:1px solid var(--line);color:var(--tex
 .link form.edit{display:grid;grid-template-columns:1fr;gap:6px;flex:1 1 260px}.link input{padding:8px 10px;font-size:13px}
 .link button{padding:8px 12px;font-size:13px}
 @media (min-width:640px){.link form.edit{grid-template-columns:170px 1fr auto}}
+form.chan{display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:10px}form.chan input{padding:9px 10px;font-size:14px;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--raise);color:var(--text)}
+@media (min-width:640px){form.chan{grid-template-columns:150px 1fr 1fr 80px auto}.link form.chan.edit{grid-template-columns:150px 1fr 1fr 80px auto}}
 small,.muted{color:var(--muted)}code{background:var(--raise);padding:2px 6px;border-radius:6px;word-break:break-all}
 .tag{font-size:11px;padding:2px 7px;border-radius:20px;border:1px solid var(--line);color:var(--muted);margin-left:6px}
 </style>
@@ -210,6 +240,37 @@ small,.muted{color:var(--muted)}code{background:var(--raise);padding:2px 6px;bor
       </div>
     <?php endforeach; ?>
   </div>
+  <?php $chs = db()->query('SELECT * FROM vt_channels ORDER BY position, name')->fetchAll(); ?>
+  <h2>Canales de TV <span class="muted">(<?= count($chs) ?>)</span></h2>
+  <div class="card">
+    <p class="muted" style="margin-top:0">Pega el enlace de la señal en vivo del canal (por ejemplo un <code>.m3u8</code> de su página oficial).
+      En Vidtube aparecen en <b>TV abierta → De tu panel</b>.</p>
+    <form method="post" class="chan">
+      <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="ch_add">
+      <input type="text" name="name" placeholder="Nombre (ej. TV Perú)" maxlength="80" required>
+      <input type="url" name="url" placeholder="Enlace de la señal https://…" required>
+      <input type="url" name="logo" placeholder="Logo (opcional) https://…png">
+      <input type="number" name="position" placeholder="Orden" value="0" style="max-width:90px" aria-label="Orden">
+      <button>Agregar canal</button>
+    </form>
+    <?php foreach ($chs as $ch): ?>
+      <div class="link">
+        <form method="post" class="edit chan">
+          <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="ch_edit"><input type="hidden" name="id" value="<?= (int)$ch['id'] ?>">
+          <input type="text" name="name" value="<?= h($ch['name']) ?>" aria-label="Nombre" required>
+          <input type="url" name="url" value="<?= h($ch['url']) ?>" aria-label="Señal" required>
+          <input type="url" name="logo" value="<?= h((string)$ch['logo']) ?>" placeholder="Logo https://…" aria-label="Logo">
+          <input type="number" name="position" value="<?= (int)$ch['position'] ?>" aria-label="Orden">
+          <button class="ghost">Guardar</button>
+        </form>
+        <form method="post" class="confirm-delete">
+          <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="ch_delete"><input type="hidden" name="id" value="<?= (int)$ch['id'] ?>">
+          <button class="danger">Borrar</button>
+        </form>
+      </div>
+    <?php endforeach; ?>
+  </div>
+
   <p class="muted" style="margin-top:20px">La app lee estos enlaces desde <code>api.php</code> con tu clave. Los cambios aparecen en Vidtube al abrir la app o una ficha.</p>
 <?php endif; ?>
 </main>

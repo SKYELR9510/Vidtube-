@@ -177,6 +177,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                     SearchScreen(
                         onBack = { nav.popBackStack() }, onVideo = openVideo, onChannel = openChannel,
                         onMovie = openTitle, onSettings = openSettings,
+                        onTv = { nav.navigate("tv") { launchSingleTop = true } },
                     )
                 }
                 composable("channel/{url}") { entry ->
@@ -202,6 +203,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                         onWeb = openWeb,
                     )
                 }
+                composable("tv") { TvScreen(onBack = { nav.popBackStack() }, onVideo = openVideo) }
                 composable("web/{url}/{title}") { entry ->
                     WebPlayerScreen(
                         url = Uri.decode(entry.arguments?.getString("url") ?: ""),

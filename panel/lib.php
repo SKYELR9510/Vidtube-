@@ -40,6 +40,14 @@ function db(): PDO {
              created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
              INDEX idx_title (kind, tmdb_id)
            ) DEFAULT CHARSET=utf8mb4");
+    $pdo->exec($sqlite
+        ? "CREATE TABLE IF NOT EXISTS vt_channels (
+             id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, url TEXT NOT NULL, logo TEXT NULL,
+             position INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+        : "CREATE TABLE IF NOT EXISTS vt_channels (
+             id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL, url TEXT NOT NULL, logo TEXT NULL,
+             position INT NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL
+           ) DEFAULT CHARSET=utf8mb4");
     return $pdo;
 }
 
