@@ -154,6 +154,29 @@ object Repository {
         return PagedResult(videos.map { FeedEntry.Video(it) }, more)
     }
 
+    // ---------- Películas (con datos de TMDB) ----------
+    /**
+     * Busca en YouTube la película completa (gratuita y subida por quien la publique).
+     * Solo deja videos largos cuyo título coincide con la película.
+     */
+    suspend fun fullMovie(movie: TmdbMovie, runtimeMin: Int): List<VideoItem> = withContext(Dispatchers.IO) {
+        val minSec = if (runtimeMin > 0) (runtimeMin * 60L * 0.7).toLong() else 3600L
+        val year = movie.year?.toString().orEmpty()
+        val queries = buildList {
+            add("${movie.title} $year película completa")
+            if (Tmdb.norm(movie.originalTitle) != Tmdb.norm(movie.title)) add("${movie.originalTitle} $year full movie")
+        }
+        val found = LinkedHashMap<String, VideoItem>()
+        for (q in queries) {
+            val r = runCatching { categorySearch(q, minSec = minSec, noTrailers = true) }.getOrNull() ?: continue
+            r.items.filterIsInstance<FeedEntry.Video>().map { it.video }
+                .filter { Tmdb.matches(it.title, movie) }
+                .forEach { found.putIfAbsent(it.url, it) }
+            if (found.size >= 6) break
+        }
+        found.values.toList()
+    }
+
     // ---------- Shorts ----------
     /** Shorts sobre un tema (búsqueda con #shorts). */
     suspend fun shortsSearch(query: String): List<VideoItem> = withContext(Dispatchers.IO) {

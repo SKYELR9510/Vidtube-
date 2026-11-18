@@ -140,7 +140,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                             launchSingleTop = true
                             restoreState = true
                         }
-                    })
+                    }, onMovie = { id -> nav.navigate("movie/$id") })
                 }
                 composable("more/{id}/{title}") { entry ->
                     MoreScreen(
@@ -167,11 +167,22 @@ fun VidtubeRoot(isInPip: Boolean) {
                     SettingsScreen(onBack = { nav.popBackStack() }, onDownloads = { nav.navigate("downloads") })
                 }
                 composable("search") {
-                    SearchScreen(onBack = { nav.popBackStack() }, onVideo = openVideo, onChannel = openChannel)
+                    SearchScreen(
+                        onBack = { nav.popBackStack() }, onVideo = openVideo, onChannel = openChannel,
+                        onMovie = { id -> nav.navigate("movie/$id") }, onSettings = openSettings,
+                    )
                 }
                 composable("channel/{url}") { entry ->
                     val url = Uri.decode(entry.arguments?.getString("url") ?: "")
                     ChannelScreen(url, onBack = { nav.popBackStack() }, onVideo = openVideo, onSearch = openSearch)
+                }
+                composable("movie/{id}") { entry ->
+                    MovieScreen(
+                        id = entry.arguments?.getString("id")?.toLongOrNull() ?: 0L,
+                        onBack = { nav.popBackStack() },
+                        onVideo = openVideo,
+                        onMovie = { id -> nav.navigate("movie/$id") },
+                    )
                 }
                 composable("downloads") { DownloadsScreen(onBack = { nav.popBackStack() }) }
                 composable("list/{kind}") { entry ->

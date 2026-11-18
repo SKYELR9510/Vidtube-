@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.PictureInPicture
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
@@ -54,6 +55,8 @@ fun SettingsScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
     val scope = rememberCoroutineScope()
     var qualityDialog by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var tmdbDialog by remember { mutableStateOf(false) }
+    val tmdbUser by com.silva.vidtube.data.Tmdb.userToken.collectAsState()
 
     Column(Modifier.fillMaxSize().background(VColors.Background)) {
         VTopBar(title = "Configuración", onBack = onBack)
@@ -80,6 +83,16 @@ fun SettingsScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
                     Icons.Outlined.PictureInPicture, "Imagen en imagen",
                     "Ventana flotante al salir de la app viendo un video", settings.pictureInPicture,
                 ) { v -> Library.updateSettings { it.copy(pictureInPicture = v) } }
+            }
+            Group("Películas") {
+                MenuRow(
+                    Icons.Outlined.Movie, "Clave de TMDB",
+                    when {
+                        tmdbUser.isNotBlank() -> "Usando tu clave · pósters, estrenos y fichas de películas"
+                        com.silva.vidtube.data.Tmdb.hasBuiltInToken() -> "Incluida en la app · puedes poner la tuya"
+                        else -> "Sin configurar · toca para pegar tu clave de themoviedb.org"
+                    },
+                ) { tmdbDialog = true }
             }
             Group("Descargas") {
                 MenuRow(Icons.Outlined.Download, "Mis descargas", "Se guardan en Descargas/Vidtube", onDownloads)
@@ -113,6 +126,37 @@ fun SettingsScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
             }
             Spacer(Modifier.height(28.dp))
         }
+    }
+
+    if (tmdbDialog) {
+        var text by remember { mutableStateOf(tmdbUser) }
+        AlertDialog(
+            onDismissRequest = { tmdbDialog = false },
+            title = { Text("Clave de TMDB") },
+            text = {
+                Column {
+                    Text(
+                        "Pega el «API Read Access Token» de tu cuenta de themoviedb.org (Configuración → API). " +
+                            "Se guarda solo en este celular.",
+                        color = VColors.Secondary, fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = text, onValueChange = { text = it.trim() },
+                        singleLine = true, placeholder = { Text("eyJ…") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    com.silva.vidtube.data.Tmdb.setUserToken(text); tmdbDialog = false
+                }) { Text("Guardar", color = VColors.Coral) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { tmdbDialog = false }) { Text("Cancelar") }
+            },
+        )
     }
 
     if (qualityDialog) {

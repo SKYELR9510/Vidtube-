@@ -228,8 +228,13 @@ fun HomeScreen(
     onSettings: () -> Unit,
     onMore: (chipId: String, title: String) -> Unit,
     onLibrary: () -> Unit = {},
+    onMovie: (Long) -> Unit = {},
     vm: HomeViewModel = viewModel(),
+    moviesVm: MoviesViewModel = viewModel(),
 ) {
+    val tmdbToken by com.silva.vidtube.data.Tmdb.userToken.collectAsState()
+    val moviesChip = vm.selected == "c:peliculas"
+    LaunchedEffect(moviesChip, tmdbToken) { if (moviesChip) moviesVm.load() }
     LaunchedEffect(Unit) { vm.chips = buildHomeChips() }
     val paged = vm.list(vm.selected)
     LaunchedEffect(vm.selected) { paged.loadIfNeeded() }
@@ -275,6 +280,8 @@ fun HomeScreen(
                     )
                 }
             }
+            // Películas: pósters y fichas de TMDB arriba, películas completas de YouTube abajo
+            if (moviesChip) movieRows(moviesVm, onMovie, onSettings)
             // Lo útil primero: Seguir viendo, y después el feed (sin carrusel)
             if (vm.selected == "todo") {
                 val cont = historyNow.filter { !it.isShort && progressOf(it) != null }.take(12)
@@ -287,7 +294,7 @@ fun HomeScreen(
         }
         PullToRefreshBox(
             isRefreshing = paged.refreshing,
-            onRefresh = { paged.refresh() },
+            onRefresh = { paged.refresh(); if (moviesChip) moviesVm.load(force = true) },
             modifier = Modifier.fillMaxSize(),
         ) {
             key(vm.selected) {

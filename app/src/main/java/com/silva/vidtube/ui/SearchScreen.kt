@@ -2,6 +2,9 @@ package com.silva.vidtube.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -80,6 +83,12 @@ class SearchViewModel : ViewModel() {
     var results: Paged? by mutableStateOf(null)
         private set
     private var suggestJob: Job? = null
+    /** Películas de TMDB que coinciden con lo buscado (fila de pósters arriba). */
+    var movies by mutableStateOf<List<com.silva.vidtube.data.TmdbMovie>>(emptyList())
+        private set
+    /** Se abrió la categoría Películas: arriba van las filas de TMDB. */
+    var movieCategory by mutableStateOf(false)
+        private set
 
     fun onTextChange(value: String) {
         text = value
@@ -102,6 +111,12 @@ class SearchViewModel : ViewModel() {
         submitted = q
         suggestions = emptyList()
         Library.addSearch(q)
+        movieCategory = false
+        movies = emptyList()
+        if (com.silva.vidtube.data.Tmdb.isConfigured()) viewModelScope.launch {
+            movies = runCatching { com.silva.vidtube.data.Tmdb.search(q) }.getOrDefault(emptyList())
+                .filter { it.rating > 0 || it.year != null }.take(12)
+        }
         val p = Paged(viewModelScope) { Repository.search(q) }
         results = p
         p.loadIfNeeded()
@@ -113,6 +128,8 @@ class SearchViewModel : ViewModel() {
         text = label
         submitted = label
         suggestions = emptyList()
+        movies = emptyList()
+        movieCategory = chip == "c:peliculas"
         val p = Paged(viewModelScope) { loadChip(chip) }
         results = p
         p.loadIfNeeded()
@@ -124,8 +141,12 @@ fun SearchScreen(
     onBack: () -> Unit,
     onVideo: (VideoItem) -> Unit,
     onChannel: (String) -> Unit,
+    onMovie: (Long) -> Unit = {},
+    onSettings: () -> Unit = {},
     vm: SearchViewModel = viewModel(),
+    moviesVm: MoviesViewModel = viewModel(),
 ) {
+    LaunchedEffect(vm.movieCategory) { if (vm.movieCategory) moviesVm.load() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
     // El teclado no se abre solo: así se ven las categorías (tocar la barra para escribir)
@@ -161,6 +182,22 @@ fun SearchScreen(
                 onChannel = onChannel,
                 emptyTitle = "Sin resultados",
                 emptySubtitle = "Prueba con otras palabras.",
+                header = {
+                    if (vm.movieCategory) movieRows(moviesVm, onMovie, onSettings)
+                    val ms = vm.movies
+                    if (ms.isNotEmpty()) {
+                        item("tmdb_search_t") { SectionTitle("Películas") }
+                        item("tmdb_search") {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                items(ms, key = { it.id }) { m -> PosterCard(m, width = 104.dp) { onMovie(m.id) } }
+                            }
+                        }
+                        item("tmdb_search_v") { SectionTitle("Videos") }
+                    }
+                },
             )
         } else {
             val recent by Library.searches.collectAsState()

@@ -23,6 +23,12 @@ android {
         val repo = System.getenv("GITHUB_REPOSITORY")
             ?: (project.findProperty("vidtubeRepo") as String?) ?: ""
         buildConfigField("String", "UPDATE_REPO", "\"$repo\"")
+
+        // Clave de TMDB (datos de películas). Viene del secreto VIDTUBE_TMDB_TOKEN en GitHub
+        // o de local.properties / gradle.properties (tmdbToken). Si falta, la app la pide en Configuración.
+        val tmdb = (System.getenv("VIDTUBE_TMDB_TOKEN") ?: (project.findProperty("tmdbToken") as String?) ?: "")
+            .trim().replace("\"", "")
+        buildConfigField("String", "TMDB_TOKEN", "\"$tmdb\"")
     }
 
     // Clave de firma fija: la misma en tu PC y en GitHub, para que las actualizaciones
@@ -126,4 +132,5 @@ dependencies {
 
     // Pruebas automáticas (JVM)
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

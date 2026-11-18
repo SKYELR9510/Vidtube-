@@ -33,6 +33,7 @@ class VidtubeApp : Application() {
         RxJavaPlugins.setErrorHandler { Log.w("Vidtube", "Error RxJava no entregado", it) }
 
         Library.init(this)
+        com.silva.vidtube.data.Tmdb.init(this)
         com.silva.vidtube.download.Downloads.init(this)
 
         val channel = NotificationChannel(
