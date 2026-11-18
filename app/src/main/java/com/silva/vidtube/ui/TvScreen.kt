@@ -94,6 +94,7 @@ class TvViewModel : ViewModel() {
 }
 
 /** Canales de TV de señal abierta (YouTube oficial) y los del panel. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun TvContent(onVideo: (VideoItem) -> Unit, vm: TvViewModel = viewModel()) {
     LaunchedEffect(Unit) { vm.load() }
