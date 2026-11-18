@@ -30,11 +30,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -207,6 +211,12 @@ fun MovieScreen(
     var attempt by remember(id) { mutableStateOf(0) }
     // Series: temporada elegida (los capítulos se buscan por temporada)
     var season by remember(id) { mutableStateOf(1) }
+    // Enlaces que agregó el usuario a este título (solo en este celular)
+    val linkKey = com.silva.vidtube.data.UserLinks.key(id, tv)
+    val allLinks by com.silva.vidtube.data.UserLinks.all.collectAsState()
+    val myLinks = allLinks[linkKey].orEmpty()
+    var addLink by remember(id) { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(id, attempt) {
         error = null
@@ -228,8 +238,10 @@ fun MovieScreen(
         full = null
         others = emptyList()
         val eps = runCatching { Repository.seriesEpisodes(d.movie, season, d.runtimeMin) }.getOrDefault(emptyList())
-        others = eps.filter { !it.verified }
-        full = eps.filter { it.verified }
+        // Series recientes: lo que aparezca va a "otros canales"
+        val recent = !Tmdb.mayBeFreeOnYoutube(d.movie)
+        others = if (recent) eps else eps.filter { !it.verified }
+        full = if (recent) emptyList() else eps.filter { it.verified }
     }
     LaunchedEffect(id) {
         similar = runCatching { Tmdb.list(Tmdb.recommendationsRow(id, tv)) }.getOrDefault(emptyList()).take(15)
@@ -251,27 +263,27 @@ fun MovieScreen(
                     ) {
                         val first = full?.firstOrNull()
                         val other = others.firstOrNull()
+                        val mine = myLinks.firstOrNull()
                         // Si no está gratis en YouTube, el botón lleva a la plataforma donde sí está
                         val w = d.watch
                         val platform = w?.free?.firstOrNull() ?: w?.subscription?.firstOrNull()
                         val platformUrl = platform?.let { Tmdb.providerUrl(it, d.movie.title, w?.link) }
-                        val context = androidx.compose.ui.platform.LocalContext.current
                         PillButton(
                             when {
                                 first != null -> if (tv) "Ver capítulo" else "Ver película"
+                                mine != null -> "Ver: " + mine.name
                                 other != null && full != null && platformUrl == null -> if (tv) "Ver capítulo" else "Ver película"
                                 platform != null && platformUrl != null && full != null ->
                                     (if (w?.free?.isNotEmpty() == true) "Gratis en " else "Ver en ") + platform.name
-                                !Tmdb.mayBeFreeOnYoutube(d.movie) -> "Aún no está gratis"
-                                Tmdb.isMajorStudio(d) -> "No está gratis"
                                 full == null -> "Buscando…"
                                 else -> "No disponible gratis"
                             },
                             Icons.Filled.PlayArrow, primary = true,
-                            enabled = first != null || (full != null && (platformUrl != null || other != null)),
+                            enabled = first != null || mine != null || (full != null && (platformUrl != null || other != null)),
                             modifier = Modifier.weight(1f),
                         ) {
                             if (first != null) onVideo(first)
+                            else if (mine != null) openUserLink(context, mine, d.movie.title, onVideo)
                             else if (platformUrl != null) openLink(context, platformUrl)
                             else if (other != null) onVideo(other)
                         }
@@ -280,6 +292,10 @@ fun MovieScreen(
                             if (key != null) onVideo(trailerItem(d.movie, key))
                         }
                     }
+                }
+                item("mylinks") {
+                    MyLinks(myLinks, onOpen = { l -> openUserLink(context, l, d.movie.title, onVideo) },
+                        onRemove = { l -> com.silva.vidtube.data.UserLinks.remove(linkKey, l) }, onAdd = { addLink = true })
                 }
                 d.watch?.let { w ->
                     item("watch") { WhereToWatch(w, d.movie.title) }
@@ -340,22 +356,10 @@ fun MovieScreen(
                     f.isEmpty() && others.isEmpty() -> item("full_none") {
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                             Text(
-                                if (tv && !Tmdb.mayBeFreeOnYoutube(d.movie))
-                                    "Es una serie reciente: está en plataformas de pago, así que sus capítulos no están gratis " +
-                                        "en YouTube. Los videos que dicen «capítulo completo» son resúmenes o engaños. Mira el tráiler."
-                                else if (tv)
-                                    "No encontramos capítulos completos en español de la temporada $season en un canal oficial de YouTube " +
-                                        "(descartamos narraciones, resúmenes y videos en otros idiomas)."
-                                else if (Tmdb.isMajorStudio(d) && Tmdb.mayBeFreeOnYoutube(d.movie))
-                                    "Es de un gran estudio (" + d.studios.first() + "): sus películas no están gratis en YouTube. " +
-                                        "Los videos con ese título son narraciones o copias. Mira arriba «Dónde ver»."
-                                else if (!Tmdb.mayBeFreeOnYoutube(d.movie))
-                                    "Es un estreno reciente: todavía está en cines o en plataformas de pago, así que no " +
-                                        "está gratis en YouTube. Los videos que dicen «película completa» son reseñas o engaños. " +
-                                        "Mira el tráiler mientras tanto."
-                                else
-                                    "No encontramos esta película completa, gratis y en español en un canal oficial de YouTube " +
-                                        "(descartamos narraciones, reseñas, resúmenes y videos en otros idiomas). Mira «Dónde ver».",
+                                (if (tv) "No encontramos capítulos completos en español de la temporada $season en YouTube"
+                                else "No encontramos esta película completa en español en YouTube") +
+                                    " (se descartan narraciones, reseñas, resúmenes y videos en otros idiomas). " +
+                                    "Mira «Dónde ver» o agrega tu propio enlace en «Tus enlaces».",
                                 color = VColors.Secondary, fontSize = 13.sp,
                             )
                         }
@@ -368,7 +372,7 @@ fun MovieScreen(
                     item("others_t") {
                         SectionTitle(
                             "De otros canales (sin verificar)",
-                            subtitle = "Coinciden en título, duración e idioma, pero el canal no es oficial: " +
+                            subtitle = "Coinciden en título, duración e idioma; el canal no es oficial: " +
                                 "puede ser la " + (if (tv) "serie" else "película") + " completa o no.",
                         )
                     }
@@ -392,6 +396,9 @@ fun MovieScreen(
                     )
                 }
             }
+        }
+        if (addLink) AddLinkDialog(onDismiss = { addLink = false }) { url, name ->
+            com.silva.vidtube.data.UserLinks.add(linkKey, url, name)
         }
         // Volver
         Box(
@@ -565,5 +572,128 @@ private fun openLink(context: android.content.Context, url: String) {
         )
     }.onFailure {
         android.widget.Toast.makeText(context, "No se pudo abrir el enlace", android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
+/** «Tus enlaces»: enlaces que el usuario guardó para este título. */
+@Composable
+private fun MyLinks(
+    links: List<com.silva.vidtube.data.UserLink>,
+    onOpen: (com.silva.vidtube.data.UserLink) -> Unit,
+    onRemove: (com.silva.vidtube.data.UserLink) -> Unit,
+    onAdd: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        SectionTitle("Tus enlaces", subtitle = if (links.isEmpty()) "Agrega un enlace a este título: se guarda solo en tu celular." else null)
+        for (l in links) {
+            Row(
+                Modifier.fillMaxWidth().clickable(onClickLabel = "Abrir ${l.name}") { onOpen(l) }
+                    .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    when (l.kind) {
+                        com.silva.vidtube.data.UserLink.Kind.YOUTUBE -> Icons.Filled.PlayArrow
+                        com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> Icons.Outlined.Movie
+                        else -> Icons.Outlined.Link
+                    },
+                    null, tint = VColors.Coral, modifier = Modifier.size(22.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(l.name, color = VColors.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        when (l.kind) {
+                            com.silva.vidtube.data.UserLink.Kind.YOUTUBE -> "YouTube · se ve en Vidtube"
+                            com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · archivo de video"
+                            else -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · se abre en el navegador"
+                        },
+                        color = VColors.Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                androidx.compose.material3.IconButton(onClick = { onRemove(l) }) {
+                    Icon(Icons.Outlined.Close, "Quitar enlace", tint = VColors.Muted)
+                }
+            }
+        }
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(20.dp))
+                .border(1.dp, VColors.Divider, RoundedCornerShape(20.dp)).clickable(onClick = onAdd)
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Add, null, tint = VColors.Text, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Agregar enlace", color = VColors.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun AddLinkDialog(onDismiss: () -> Unit, onSave: (url: String, name: String) -> String?) {
+    var url by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Agregar enlace") },
+        text = {
+            Column {
+                Text(
+                    "Pega el enlace de un video de YouTube, de un archivo de video o de una página. " +
+                        "Se guarda solo en este celular.",
+                    color = VColors.Secondary, fontSize = 13.sp,
+                )
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = url, onValueChange = { url = it; error = null }, singleLine = true,
+                    label = { Text("Enlace") }, placeholder = { Text("https://…") }, isError = error != null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = name, onValueChange = { name = it }, singleLine = true,
+                    label = { Text("Nombre (opcional)") }, placeholder = { Text("Ej.: Versión latino") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let { Text(it, color = VColors.Coral, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)) }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                val e = onSave(url, name)
+                if (e == null) onDismiss() else error = e
+            }) { Text("Guardar", color = VColors.Coral) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancelar") } },
+    )
+}
+
+/** Abre un enlace del usuario: YouTube en Vidtube, archivos de video en un reproductor, lo demás en el navegador. */
+private fun openUserLink(
+    context: android.content.Context,
+    link: com.silva.vidtube.data.UserLink,
+    title: String,
+    onVideo: (VideoItem) -> Unit,
+) {
+    when (link.kind) {
+        com.silva.vidtube.data.UserLink.Kind.YOUTUBE -> {
+            val watch = com.silva.vidtube.data.UserLinks.youtubeWatchUrl(link.url)
+            if (watch != null) {
+                onVideo(
+                    VideoItem(
+                        url = watch, title = title, thumbnail = null, channelName = link.name,
+                        channelUrl = null, channelAvatar = null, durationSec = 0, views = -1, uploaded = null, isLive = false,
+                    )
+                )
+            } else openLink(context, link.url)
+        }
+        com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> runCatching {
+            val i = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                .setDataAndType(android.net.Uri.parse(link.url), "video/*")
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(android.content.Intent.createChooser(i, "Abrir video con").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure { openLink(context, link.url) }
+        else -> openLink(context, link.url)
     }
 }

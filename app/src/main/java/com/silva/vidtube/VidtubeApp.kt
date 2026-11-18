@@ -34,6 +34,7 @@ class VidtubeApp : Application() {
 
         Library.init(this)
         com.silva.vidtube.data.Tmdb.init(this)
+        com.silva.vidtube.data.UserLinks.init(this)
         com.silva.vidtube.download.Downloads.init(this)
 
         val channel = NotificationChannel(

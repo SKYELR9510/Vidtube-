@@ -184,8 +184,9 @@ object Repository {
 
     suspend fun fullMovie(detail: TmdbDetail): FullMatches = withContext(Dispatchers.IO) {
         val movie = detail.movie
-        val none = FullMatches(emptyList(), emptyList())
-        if (!Tmdb.mayBeFreeOnYoutube(movie) || Tmdb.isMajorStudio(detail)) return@withContext none
+        // Estrenos y grandes estudios también se buscan, pero todo lo que aparezca va a
+        // "otros canales" (no es una copia oficial)
+        val unofficial = !Tmdb.mayBeFreeOnYoutube(movie) || Tmdb.isMajorStudio(detail)
         val runtimeSec = if (detail.runtimeMin > 0) detail.runtimeMin * 60L else 0L
         val minSec = if (runtimeSec > 0) (runtimeSec * 0.88).toLong() else 3600L
         val year = movie.year?.toString().orEmpty()
@@ -200,11 +201,11 @@ object Repository {
             if (found.values.count { it.verified } >= 3) break
         }
         val all = found.values.toList()
-        FullMatches(all.filter { it.verified }, all.filter { !it.verified }.take(8))
+        if (unofficial) FullMatches(emptyList(), all.take(10))
+        else FullMatches(all.filter { it.verified }, all.filter { !it.verified }.take(8))
     }
 
     suspend fun seriesEpisodes(show: TmdbMovie, season: Int, episodeMin: Int): List<VideoItem> = withContext(Dispatchers.IO) {
-        if (!Tmdb.mayBeFreeOnYoutube(show)) return@withContext emptyList()
         val epSec = if (episodeMin > 0) episodeMin * 60L else 0L
         val minSec = if (epSec > 0) (epSec * 0.7).toLong() else 1200L
         val queries = listOf(

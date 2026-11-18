@@ -393,10 +393,8 @@ object Tmdb {
      */
     fun looksFake(title: String, channel: String, currentYear: Int = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)): Boolean {
         val t = norm(title)
-        if (fakeWords.containsMatchIn(t) || fakeWords.containsMatchIn(norm(channel))) return true
-        val recent = Regex("\\b(${currentYear}|${currentYear - 1})\\b")
-        return recent.containsMatchIn(t) &&
-            Regex("pelicula completa|full movie|capitulo completo|episodio completo|full episode").containsMatchIn(t)
+        @Suppress("UNUSED_VARIABLE") val y = currentYear
+        return fakeWords.containsMatchIn(t) || fakeWords.containsMatchIn(norm(channel))
     }
 
     /** ¿Este video de YouTube parece de verdad la película completa? */
