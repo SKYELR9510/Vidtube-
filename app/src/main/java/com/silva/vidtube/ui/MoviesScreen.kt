@@ -241,21 +241,35 @@ fun MovieScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         val first = full?.firstOrNull()
+                        // Si no está gratis en YouTube, el botón lleva a la plataforma donde sí está
+                        val w = d.watch
+                        val platform = w?.free?.firstOrNull() ?: w?.subscription?.firstOrNull()
+                        val platformUrl = platform?.let { Tmdb.providerUrl(it, d.movie.title, w?.link) }
+                        val context = androidx.compose.ui.platform.LocalContext.current
                         PillButton(
                             when {
                                 first != null -> if (tv) "Ver capítulo" else "Ver película"
+                                platform != null && platformUrl != null && full != null ->
+                                    (if (w?.free?.isNotEmpty() == true) "Gratis en " else "Ver en ") + platform.name
                                 !Tmdb.mayBeFreeOnYoutube(d.movie) -> "Aún no está gratis"
                                 full == null -> "Buscando…"
                                 else -> "No disponible gratis"
                             },
-                            Icons.Filled.PlayArrow, primary = true, enabled = first != null,
+                            Icons.Filled.PlayArrow, primary = true,
+                            enabled = first != null || (platformUrl != null && full != null),
                             modifier = Modifier.weight(1f),
-                        ) { first?.let(onVideo) }
+                        ) {
+                            if (first != null) onVideo(first)
+                            else if (platformUrl != null) openLink(context, platformUrl)
+                        }
                         val key = d.trailerKey
                         PillButton("Tráiler", Icons.Outlined.Movie, primary = false, enabled = key != null, modifier = Modifier.weight(1f)) {
                             if (key != null) onVideo(trailerItem(d.movie, key))
                         }
                     }
+                }
+                d.watch?.let { w ->
+                    item("watch") { WhereToWatch(w, d.movie.title) }
                 }
                 if (d.movie.overview.isNotBlank()) {
                     item("overview") {
@@ -331,7 +345,7 @@ fun MovieScreen(
                         }
                     }
                     else -> items(f, key = { "full:" + it.url }) { v ->
-                        VideoCard(v, onClick = { onVideo(v) }, onChannel = {}, reason = (if (tv) "Capítulo completo · " else "Duración completa · ") + v.channelName)
+                        VideoCard(v, onClick = { onVideo(v) }, onChannel = {}, reason = (if (tv) "Capítulo completo · " else "Duración completa · ") + v.channelName + (if (v.verified) " ✓ canal verificado" else ""))
                     }
                 }
                 if (similar.isNotEmpty()) {
@@ -463,5 +477,65 @@ fun KeepListAtTop(state: androidx.compose.foundation.lazy.LazyListState, trigger
             state.scrollToItem(0)
             flags[1] = false
         }
+    }
+}
+
+/** «Dónde ver»: plataformas en Perú (gratis, suscripción, alquiler o compra). */
+@Composable
+private fun WhereToWatch(w: com.silva.vidtube.data.TmdbWatch, title: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+        SectionTitle("Dónde ver")
+        val groups = listOf(
+            "Gratis" to w.free,
+            "Con suscripción" to w.subscription,
+            "Alquiler o compra" to w.rentOrBuy,
+        ).filter { it.second.isNotEmpty() }
+        for ((label, list) in groups) {
+            Text(
+                label, color = VColors.Secondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 16.dp, top = 2.dp, bottom = 6.dp),
+            )
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(bottom = 10.dp),
+            ) {
+                items(list, key = { label + it.id }) { p ->
+                    val url = Tmdb.providerUrl(p, title, w.link)
+                    Column(
+                        Modifier.width(68.dp).clip(RoundedCornerShape(10.dp))
+                            .clickable(enabled = url != null, onClickLabel = "Abrir ${p.name}") { url?.let { openLink(context, it) } },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        AsyncImage(
+                            model = p.logo, contentDescription = p.name, contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)).background(VColors.Card)
+                                .border(1.dp, VColors.Divider, RoundedCornerShape(12.dp)),
+                        )
+                        Text(
+                            p.name, color = VColors.Text, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+            }
+        }
+        Text(
+            "Disponibilidad en Perú según JustWatch (vía TMDB). Al tocar una plataforma se abre su app o su página.",
+            color = VColors.Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp),
+        )
+    }
+}
+
+/** Abre un enlace en la app que corresponda (Netflix, Prime…) o en el navegador. */
+private fun openLink(context: android.content.Context, url: String) {
+    runCatching {
+        context.startActivity(
+            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }.onFailure {
+        android.widget.Toast.makeText(context, "No se pudo abrir el enlace", android.widget.Toast.LENGTH_SHORT).show()
     }
 }

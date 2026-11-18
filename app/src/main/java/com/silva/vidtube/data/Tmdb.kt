@@ -25,6 +25,23 @@ data class TmdbMovie(
     val tv: Boolean = false,
 )
 
+/** Plataforma donde se puede ver un título (datos de JustWatch vía TMDB). */
+data class TmdbProvider(val id: Int, val name: String, val logo: String?)
+
+/** Dónde ver un título en Perú. */
+data class TmdbWatch(
+    /** Página de TMDB con todas las opciones (enlaces de JustWatch). */
+    val link: String?,
+    /** Gratis (con o sin anuncios). */
+    val free: List<TmdbProvider>,
+    /** Incluido en una suscripción (Netflix, Prime, Disney+…). */
+    val subscription: List<TmdbProvider>,
+    /** Alquiler o compra. */
+    val rentOrBuy: List<TmdbProvider>,
+) {
+    val isEmpty get() = free.isEmpty() && subscription.isEmpty() && rentOrBuy.isEmpty()
+}
+
 /** Temporada de una serie. */
 data class TmdbSeason(val number: Int, val name: String, val episodes: Int, val poster: String?, val year: Int?)
 
@@ -41,6 +58,8 @@ data class TmdbDetail(
     val trailerKey: String?,
     /** Solo series: temporadas (sin "especiales"). */
     val seasons: List<TmdbSeason> = emptyList(),
+    /** Plataformas donde está en Perú. */
+    val watch: TmdbWatch? = null,
 )
 
 /** Fila de la sección de películas (Tendencias, En cines, géneros…). */
@@ -159,7 +178,7 @@ object Tmdb {
     suspend fun detail(id: Long, tv: Boolean = false): TmdbDetail = withContext(Dispatchers.IO) {
         val kind = if (tv) "tv" else "movie"
         parseDetail(
-            get("$kind/$id?language=$LANG&append_to_response=videos,credits&include_video_language=es,en,null"),
+            get("$kind/$id?language=$LANG&append_to_response=videos,credits,watch/providers&include_video_language=es,en,null"),
             tv,
         )
     }
@@ -241,6 +260,7 @@ object Tmdb {
         }.orEmpty()
         return TmdbDetail(
             movie = movie,
+            watch = parseWatch(o.optJSONObject("watch/providers")),
             seasons = seasons,
             runtimeMin = runtime,
             genres = genres,
@@ -249,6 +269,46 @@ object Tmdb {
             director = director,
             trailerKey = pickTrailer(o.optJSONObject("videos")),
         )
+    }
+
+    /** Plataformas en Perú (TMDB las obtiene de JustWatch). */
+    fun parseWatch(o: JSONObject?, country: String = REGION): TmdbWatch? {
+        val pe = o?.optJSONObject("results")?.optJSONObject(country) ?: return null
+        fun list(vararg keys: String): List<TmdbProvider> = keys.flatMap { k ->
+            val a = pe.optJSONArray(k) ?: return@flatMap emptyList<Pair<Int, TmdbProvider>>()
+            (0 until a.length()).mapNotNull { a.optJSONObject(it) }.mapNotNull { p ->
+                val id = p.optInt("provider_id", -1)
+                val name = p.optString("provider_name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                if (id < 0) return@mapNotNull null
+                p.optInt("display_priority", 99) to TmdbProvider(id, name, image(p.optString("logo_path"), "w92"))
+            }
+        }.sortedBy { it.first }.map { it.second }.distinctBy { it.id }
+        val free = list("free", "ads")
+        val subs = list("flatrate").filter { s -> free.none { it.id == s.id } }
+        val rent = list("rent", "buy").filter { r -> (free + subs).none { it.id == r.id } }
+        return TmdbWatch(pe.optString("link").takeIf { it.startsWith("https://") }, free, subs, rent)
+            .takeIf { !it.isEmpty }
+    }
+
+    /**
+     * Enlace para abrir la plataforma buscando el título (en Android abre la app si está
+     * instalada). Si no conocemos la plataforma, se usa la página de TMDB con sus enlaces.
+     */
+    fun providerUrl(p: TmdbProvider, title: String, fallback: String?): String? {
+        val q = enc(title)
+        val n = p.name.lowercase()
+        return when {
+            n.startsWith("netflix") -> "https://www.netflix.com/search?q=$q"
+            n.contains("amazon prime") || n.contains("prime video") -> "https://www.primevideo.com/search?phrase=$q"
+            n.startsWith("disney") -> "https://www.disneyplus.com/search?q=$q"
+            n == "max" || n.startsWith("hbo max") -> "https://play.max.com/search?q=$q"
+            n.startsWith("apple tv") -> "https://tv.apple.com/search?term=$q"
+            n.startsWith("crunchyroll") -> "https://www.crunchyroll.com/search?q=$q"
+            n.startsWith("mubi") -> "https://mubi.com/search/films?query=$q"
+            n.startsWith("tubi") -> "https://tubitv.com/search/$q"
+            n.startsWith("youtube") -> "https://www.youtube.com/results?search_query=$q"
+            else -> fallback
+        }
     }
 
     /** Tráiler de YouTube: primero en español, primero los oficiales. */

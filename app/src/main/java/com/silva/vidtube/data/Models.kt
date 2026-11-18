@@ -26,6 +26,8 @@ data class VideoItem(
     val isShort: Boolean = false,
     /** Fecha de publicación (segundos desde 1970) si se conoce; sirve para mostrar lo reciente. */
     val publishedAt: Long? = null,
+    /** Canal verificado por YouTube (las distribuidoras oficiales lo suelen tener). */
+    val verified: Boolean = false,
 ) {
     /** Días desde que se publicó (null si no se sabe). */
     val ageDays: Long?
@@ -76,6 +78,7 @@ data class VideoItem(
             isShort = item.isShortFormContent,
             publishedAt = item.uploadDate?.instant?.epochSecond
                 ?: parseAgo(item.textualUploadDate),
+            verified = runCatching { item.isUploaderVerified }.getOrDefault(false),
         )
 
         fun from(info: StreamInfo) = VideoItem(

@@ -114,7 +114,10 @@ object Repository {
         val keep: (VideoItem) -> Boolean = { v ->
             v.durationSec >= minSec && !(noTrailers && (trailerWords.containsMatchIn(v.title) || Tmdb.looksFake(v.title, v.channelName)))
         }
-        freshPage(handler, info.relatedItems, info.nextPage, maxAgeDays, pagesLeft = if (minSec > 0) 4 else 2, keep = keep)
+        val page = freshPage(handler, info.relatedItems, info.nextPage, maxAgeDays, pagesLeft = if (minSec > 0) 4 else 2, keep = keep)
+        // Películas y series completas: primero los canales verificados (distribuidoras oficiales)
+        if (!noTrailers) page
+        else PagedResult(page.items.sortedByDescending { (it as? FeedEntry.Video)?.video?.verified == true }, page.loadMore)
     }
 
     private fun freshPage(
@@ -180,7 +183,8 @@ object Repository {
                 .forEach { found.putIfAbsent(it.url, it) }
             if (found.size >= 6) break
         }
-        found.values.toList()
+        // Primero los canales verificados: suelen ser las distribuidoras que suben la película con permiso
+        found.values.sortedByDescending { it.verified }
     }
 
     /**
@@ -207,7 +211,7 @@ object Repository {
                 .forEach { found.putIfAbsent(it.url, it) }
             if (found.size >= 10) break
         }
-        found.values.toList()
+        found.values.sortedByDescending { it.verified }
     }
 
     // ---------- Shorts ----------

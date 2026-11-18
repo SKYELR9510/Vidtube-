@@ -131,4 +131,27 @@ class TmdbTest {
         assertFalse(list[0].tv)
         assertTrue(list[1].tv)
     }
+
+    @Test
+    fun leeDondeVerEnPeru() {
+        val w = Tmdb.parseWatch(JSONObject("""
+            {"results":{
+              "US":{"flatrate":[{"provider_id":1,"provider_name":"Solo EEUU"}]},
+              "PE":{"link":"https://www.themoviedb.org/movie/603/watch?locale=PE",
+                    "flatrate":[{"provider_id":8,"provider_name":"Netflix","logo_path":"/n.jpg","display_priority":2},
+                                {"provider_id":1899,"provider_name":"Max","logo_path":"/m.jpg","display_priority":1}],
+                    "ads":[{"provider_id":300,"provider_name":"Pluto TV","logo_path":"/p.jpg"}],
+                    "rent":[{"provider_id":2,"provider_name":"Apple TV","logo_path":"/a.jpg"}],
+                    "buy":[{"provider_id":2,"provider_name":"Apple TV","logo_path":"/a.jpg"}]}
+            }}
+        """.trimIndent()))!!
+        assertEquals(listOf("Pluto TV"), w.free.map { it.name })
+        assertEquals(listOf("Max", "Netflix"), w.subscription.map { it.name })
+        assertEquals(listOf("Apple TV"), w.rentOrBuy.map { it.name })
+        assertEquals("https://image.tmdb.org/t/p/w92/n.jpg", w.subscription[1].logo)
+        assertNull(Tmdb.parseWatch(JSONObject("""{"results":{"US":{}}}""")))
+        // Netflix abre su búsqueda; una plataforma desconocida usa la página de TMDB
+        assertEquals("https://www.netflix.com/search?q=La+Odisea", Tmdb.providerUrl(w.subscription[1], "La Odisea", w.link))
+        assertEquals(w.link, Tmdb.providerUrl(w.free[0], "La Odisea", w.link))
+    }
 }
