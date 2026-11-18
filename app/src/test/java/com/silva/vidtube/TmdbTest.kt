@@ -92,9 +92,13 @@ class TmdbTest {
         assertFalse(Tmdb.mayBeFreeOnYoutube(m.copy(year = 2026), 2026))
         assertFalse(Tmdb.mayBeFreeOnYoutube(m.copy(year = 2025), 2026))
         val runtime = 136 * 60L
-        assertTrue(Tmdb.looksLikeFullMovie("Matrix película completa en español", "Cine Clásico", runtime, runtime, m))
-        assertFalse(Tmdb.looksLikeFullMovie("Matrix película completa en español", "Cine Clásico", runtime / 2, runtime, m))
-        assertFalse(Tmdb.looksLikeFullMovie("Matrix reseña completa", "Cine Clásico", runtime, runtime, m))
+        assertTrue(Tmdb.looksLikeFullMovie("Matrix película completa en español", "Cine Clásico", runtime, runtime, m, verified = true))
+        assertFalse(Tmdb.looksLikeFullMovie("Matrix película completa en español", "Cine Clásico", runtime / 2, runtime, m, verified = true))
+        assertFalse(Tmdb.looksLikeFullMovie("Matrix reseña completa", "Cine Clásico", runtime, runtime, m, verified = true))
+        // Canal pequeño sin verificar: no se ofrece aunque el título diga "película completa"
+        assertFalse(Tmdb.looksLikeFullMovie("Matrix película completa en español", "CineVértigo", runtime, runtime, m, verified = false))
+        // Subtitulada (audio en otro idioma): no
+        assertFalse(Tmdb.looksLikeFullMovie("Matrix full movie sub español", "Cine Clásico", runtime, runtime, m, verified = true))
     }
 
     @Test
@@ -153,5 +157,29 @@ class TmdbTest {
         // Netflix abre su búsqueda; una plataforma desconocida usa la página de TMDB
         assertEquals("https://www.netflix.com/search?q=La+Odisea", Tmdb.providerUrl(w.subscription[1], "La Odisea", w.link))
         assertEquals(w.link, Tmdb.providerUrl(w.free[0], "La Odisea", w.link))
+    }
+
+    @Test
+    fun narracionesEIdiomas() {
+        assertTrue(Tmdb.looksFake("Coco película narrada en español", "Cine", 2026))
+        assertTrue(Tmdb.looksFake("La historia de Coco | Narración completa", "Cine", 2026))
+        assertTrue(Tmdb.isSpanish("[Doblado Esp] Joven Monje Usa Kung Fu"))
+        assertTrue(Tmdb.isSpanish("Lía | Capítulo 1 Completo - Serie Bíblica"))
+        assertFalse(Tmdb.isSpanish("Joven monje kung fu película completa sub español"))
+        assertFalse(Tmdb.isSpanish("The Divorced Empress full episode english"))
+    }
+
+    @Test
+    fun grandesEstudiosNoSeBuscanEnYoutube() {
+        val d = Tmdb.parseDetail(JSONObject("""
+            {"id":354912,"title":"Coco","release_date":"2017-10-27","poster_path":"/c.jpg",
+             "production_companies":[{"name":"Pixar"},{"name":"Walt Disney Pictures"}]}
+        """.trimIndent()))
+        assertTrue(Tmdb.isMajorStudio(d))
+        val indie = Tmdb.parseDetail(JSONObject("""
+            {"id":1,"title":"La noche","release_date":"1968-10-01","poster_path":"/n.jpg",
+             "production_companies":[{"name":"Image Ten"}]}
+        """.trimIndent()))
+        assertFalse(Tmdb.isMajorStudio(indie))
     }
 }

@@ -211,7 +211,7 @@ fun MovieScreen(
         runCatching { Tmdb.detail(id, tv) }
             .onSuccess { d ->
                 detail = d
-                if (!tv) full = runCatching { Repository.fullMovie(d.movie, d.runtimeMin) }.getOrDefault(emptyList())
+                if (!tv) full = runCatching { Repository.fullMovie(d) }.getOrDefault(emptyList())
                 else season = d.seasons.firstOrNull()?.number ?: 1
             }
             .onFailure { error = it.message ?: if (tv) "No se pudo cargar la serie." else "No se pudo cargar la película." }
@@ -252,6 +252,7 @@ fun MovieScreen(
                                 platform != null && platformUrl != null && full != null ->
                                     (if (w?.free?.isNotEmpty() == true) "Gratis en " else "Ver en ") + platform.name
                                 !Tmdb.mayBeFreeOnYoutube(d.movie) -> "Aún no está gratis"
+                                Tmdb.isMajorStudio(d) -> "No está gratis"
                                 full == null -> "Buscando…"
                                 else -> "No disponible gratis"
                             },
@@ -331,15 +332,18 @@ fun MovieScreen(
                                     "Es una serie reciente: está en plataformas de pago, así que sus capítulos no están gratis " +
                                         "en YouTube. Los videos que dicen «capítulo completo» son resúmenes o engaños. Mira el tráiler."
                                 else if (tv)
-                                    "No encontramos capítulos completos y gratis de la temporada $season en YouTube " +
-                                        "(descartamos reseñas, resúmenes y fragmentos)."
+                                    "No encontramos capítulos completos en español de la temporada $season en un canal oficial de YouTube " +
+                                        "(descartamos narraciones, resúmenes y videos en otros idiomas)."
+                                else if (Tmdb.isMajorStudio(d) && Tmdb.mayBeFreeOnYoutube(d.movie))
+                                    "Es de un gran estudio (" + d.studios.first() + "): sus películas no están gratis en YouTube. " +
+                                        "Los videos con ese título son narraciones o copias. Mira arriba «Dónde ver»."
                                 else if (!Tmdb.mayBeFreeOnYoutube(d.movie))
                                     "Es un estreno reciente: todavía está en cines o en plataformas de pago, así que no " +
                                         "está gratis en YouTube. Los videos que dicen «película completa» son reseñas o engaños. " +
                                         "Mira el tráiler mientras tanto."
                                 else
-                                    "No encontramos esta película completa y gratis en YouTube (descartamos reseñas, " +
-                                        "resúmenes y fragmentos). Puedes ver el tráiler.",
+                                    "No encontramos esta película completa, gratis y en español en un canal oficial de YouTube " +
+                                        "(descartamos narraciones, reseñas, resúmenes y videos en otros idiomas). Mira «Dónde ver».",
                                 color = VColors.Secondary, fontSize = 13.sp,
                             )
                         }

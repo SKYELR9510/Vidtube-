@@ -112,9 +112,12 @@ object Repository {
         val handler = yt.searchQHFactory.fromQuery(query, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
         val info = SearchInfo.getInfo(yt, handler)
         val keep: (VideoItem) -> Boolean = { v ->
-            v.durationSec >= minSec && !(noTrailers && (trailerWords.containsMatchIn(v.title) || Tmdb.looksFake(v.title, v.channelName)))
+            v.durationSec >= minSec && (!noTrailers ||
+                // Películas y series completas: solo canales verificados, en español y sin reseñas ni narraciones
+                (!trailerWords.containsMatchIn(v.title) && !Tmdb.looksFake(v.title, v.channelName) &&
+                    v.verified && Tmdb.isSpanish(v.title)))
         }
-        val page = freshPage(handler, info.relatedItems, info.nextPage, maxAgeDays, pagesLeft = if (minSec > 0) 4 else 2, keep = keep)
+        val page = freshPage(handler, info.relatedItems, info.nextPage, maxAgeDays, pagesLeft = if (noTrailers) 6 else if (minSec > 0) 4 else 2, keep = keep)
         // Películas y series completas: primero los canales verificados (distribuidoras oficiales)
         if (!noTrailers) page
         else PagedResult(page.items.sortedByDescending { (it as? FeedEntry.Video)?.video?.verified == true }, page.loadMore)
@@ -166,45 +169,38 @@ object Repository {
      *  - La duración tiene que parecerse a la de la película (±12 %).
      *  - Se descartan títulos y canales de reseñas, resúmenes, escenas, reacciones, etc.
      */
-    suspend fun fullMovie(movie: TmdbMovie, runtimeMin: Int): List<VideoItem> = withContext(Dispatchers.IO) {
-        if (!Tmdb.mayBeFreeOnYoutube(movie)) return@withContext emptyList()
-        val runtimeSec = if (runtimeMin > 0) runtimeMin * 60L else 0L
+    suspend fun fullMovie(detail: TmdbDetail): List<VideoItem> = withContext(Dispatchers.IO) {
+        val movie = detail.movie
+        if (!Tmdb.mayBeFreeOnYoutube(movie) || Tmdb.isMajorStudio(detail)) return@withContext emptyList()
+        val runtimeSec = if (detail.runtimeMin > 0) detail.runtimeMin * 60L else 0L
         val minSec = if (runtimeSec > 0) (runtimeSec * 0.88).toLong() else 3600L
         val year = movie.year?.toString().orEmpty()
-        val queries = buildList {
-            add("${movie.title} $year película completa")
-            if (Tmdb.norm(movie.originalTitle) != Tmdb.norm(movie.title)) add("${movie.originalTitle} $year full movie")
-        }
         val found = LinkedHashMap<String, VideoItem>()
-        for (q in queries) {
+        for (q in listOf("${movie.title} $year película completa en español", "${movie.title} película completa latino")) {
             val r = runCatching { categorySearch(q, minSec = minSec, noTrailers = true) }.getOrNull() ?: continue
             r.items.filterIsInstance<FeedEntry.Video>().map { it.video }
-                .filter { Tmdb.looksLikeFullMovie(it.title, it.channelName, it.durationSec, runtimeSec, movie) }
+                .filter { Tmdb.looksLikeFullMovie(it.title, it.channelName, it.durationSec, runtimeSec, movie, it.verified) }
                 .forEach { found.putIfAbsent(it.url, it) }
-            if (found.size >= 6) break
+            if (found.size >= 4) break
         }
-        // Primero los canales verificados: suelen ser las distribuidoras que suben la película con permiso
-        found.values.sortedByDescending { it.verified }
+        found.values.toList()
     }
 
-    /**
-     * Capítulos completos de una serie en YouTube para una temporada. Mismo cuidado que con
-     * las películas: título de la serie, duración parecida a la de un capítulo y sin reseñas.
-     */
     suspend fun seriesEpisodes(show: TmdbMovie, season: Int, episodeMin: Int): List<VideoItem> = withContext(Dispatchers.IO) {
         if (!Tmdb.mayBeFreeOnYoutube(show)) return@withContext emptyList()
         val epSec = if (episodeMin > 0) episodeMin * 60L else 0L
         val minSec = if (epSec > 0) (epSec * 0.7).toLong() else 1200L
-        val queries = buildList {
-            add("${show.title} temporada $season capítulo completo")
-            if (Tmdb.norm(show.originalTitle) != Tmdb.norm(show.title)) add("${show.originalTitle} season $season full episode")
-        }
+        val queries = listOf(
+            "${show.title} temporada $season capítulo completo en español",
+            "${show.title} temporada $season episodio completo latino",
+        )
         val found = LinkedHashMap<String, VideoItem>()
         for (q in queries) {
             val r = runCatching { categorySearch(q, minSec = minSec, noTrailers = true) }.getOrNull() ?: continue
             r.items.filterIsInstance<FeedEntry.Video>().map { it.video }
                 .filter { v ->
                     Tmdb.matches(v.title, show) && !Tmdb.looksFake(v.title, v.channelName) &&
+                        v.verified && Tmdb.isSpanish(v.title) &&
                         // Un capítulo no dura el triple de lo normal (eso son recopilaciones o películas)
                         (epSec == 0L || v.durationSec <= epSec * 3)
                 }

@@ -60,6 +60,8 @@ data class TmdbDetail(
     val seasons: List<TmdbSeason> = emptyList(),
     /** Plataformas donde está en Perú. */
     val watch: TmdbWatch? = null,
+    /** Productoras (películas) o cadenas (series). */
+    val studios: List<String> = emptyList(),
 )
 
 /** Fila de la sección de películas (Tendencias, En cines, géneros…). */
@@ -258,8 +260,12 @@ object Tmdb {
                     )
                 }
         }.orEmpty()
+        val studios = listOf("production_companies", "networks").flatMap { k ->
+            o.optJSONArray(k)?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it)?.optString("name")?.takeIf { n -> n.isNotBlank() } } }.orEmpty()
+        }
         return TmdbDetail(
             movie = movie,
+            studios = studios,
             watch = parseWatch(o.optJSONObject("watch/providers")),
             seasons = seasons,
             runtimeMin = runtime,
@@ -343,8 +349,34 @@ object Tmdb {
         "\\b(resena|review|reviews|critica|critic|criticas|resumen|resumida|recap|explicad[ao]|explicacion|" +
             "analisis|reaccion|reaction|reacciona|escena|escenas|pelea|clip|clips|fragmento|teaser|trailer|" +
             "podcast|en minutos|en \\d+ minutos|curiosidades|easter eggs|teoria|teorias|final explicado|" +
-            "spoilers?|opinion|comentario|comentamos|ending|recapped|movie recap)\\b"
+            "spoilers?|opinion|comentario|comentamos|ending|recapped|movie recap|" +
+            // Narraciones: alguien cuenta la película con escenas de fondo
+            "narrad[ao]s?|narracion|narrador|narradora|relato|te cuento|resumen narrado)\\b"
     )
+
+    /** Grandes estudios: sus películas nunca están gratis de forma legítima en YouTube. */
+    private val majorStudios = listOf(
+        "walt disney", "disney", "pixar", "marvel", "lucasfilm", "20th century", "twentieth century",
+        "warner bros", "dc films", "dc studios", "new line", "universal pictures", "illumination",
+        "dreamworks", "columbia pictures", "sony pictures", "paramount", "lionsgate", "metro-goldwyn",
+        "amazon mgm", "netflix", "apple studios", "legendary", "blue sky",
+    )
+
+    /** ¿Es una película de un gran estudio? (Para series no se usa: hay cadenas que suben capítulos oficiales.) */
+    fun isMajorStudio(d: TmdbDetail): Boolean =
+        !d.movie.tv && d.studios.any { s -> val n = s.lowercase(); majorStudios.any { n.contains(it) } }
+
+    /**
+     * ¿El video es en español? Se descarta lo subtitulado (audio en otro idioma) y se acepta
+     * lo que dice "español/latino/castellano/doblado" o tiene el título en español
+     * ("película", "capítulo", "temporada"…).
+     */
+    fun isSpanish(title: String): Boolean {
+        val t = norm(title)
+        if (Regex("\\b(sub|subs|subtitulad[ao]s?|subtitulos|subtitles|sub espanol|sub esp|vose|vos|english|eng)\\b").containsMatchIn(t)) return false
+        if (Regex("\\b(espanol|latino|castellano|doblad[ao]s?|doblaje|esp)\\b").containsMatchIn(t)) return true
+        return Regex("\\b(pelicula|capitulo|episodio|temporada|completa|completo)\\b").containsMatchIn(t)
+    }
 
     /**
      * Las películas de este año o del anterior siguen en cines o plataformas de pago:
@@ -368,9 +400,14 @@ object Tmdb {
     }
 
     /** ¿Este video de YouTube parece de verdad la película completa? */
-    fun looksLikeFullMovie(title: String, channel: String, durationSec: Long, runtimeSec: Long, movie: TmdbMovie): Boolean {
+    fun looksLikeFullMovie(
+        title: String, channel: String, durationSec: Long, runtimeSec: Long, movie: TmdbMovie, verified: Boolean,
+    ): Boolean {
         if (!matches(title, movie)) return false
         if (looksFake(title, channel)) return false
+        // Solo canales verificados (distribuidoras) y en español: los canales pequeños con
+        // "película completa" en el título suelen ser narraciones o copias
+        if (!verified || !isSpanish(title)) return false
         if (runtimeSec > 0) {
             val ratio = durationSec.toDouble() / runtimeSec
             if (ratio < 0.88 || ratio > 1.12) return false
