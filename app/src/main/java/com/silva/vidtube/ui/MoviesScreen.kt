@@ -201,6 +201,8 @@ fun MovieScreen(
     var detail by remember(id) { mutableStateOf<TmdbDetail?>(null) }
     var error by remember(id) { mutableStateOf<String?>(null) }
     var full by remember(id) { mutableStateOf<List<VideoItem>?>(null) }
+    // Coinciden en todo pero el canal no está verificado: se muestran aparte
+    var others by remember(id) { mutableStateOf<List<VideoItem>>(emptyList()) }
     var similar by remember(id) { mutableStateOf<List<TmdbMovie>>(emptyList()) }
     var attempt by remember(id) { mutableStateOf(0) }
     // Series: temporada elegida (los capítulos se buscan por temporada)
@@ -211,7 +213,11 @@ fun MovieScreen(
         runCatching { Tmdb.detail(id, tv) }
             .onSuccess { d ->
                 detail = d
-                if (!tv) full = runCatching { Repository.fullMovie(d) }.getOrDefault(emptyList())
+                if (!tv) {
+                    val m = runCatching { Repository.fullMovie(d) }.getOrNull()
+                    others = m?.others.orEmpty()
+                    full = m?.official.orEmpty()
+                }
                 else season = d.seasons.firstOrNull()?.number ?: 1
             }
             .onFailure { error = it.message ?: if (tv) "No se pudo cargar la serie." else "No se pudo cargar la película." }
@@ -220,7 +226,10 @@ fun MovieScreen(
         val d = detail ?: return@LaunchedEffect
         if (!tv) return@LaunchedEffect
         full = null
-        full = runCatching { Repository.seriesEpisodes(d.movie, season, d.runtimeMin) }.getOrDefault(emptyList())
+        others = emptyList()
+        val eps = runCatching { Repository.seriesEpisodes(d.movie, season, d.runtimeMin) }.getOrDefault(emptyList())
+        others = eps.filter { !it.verified }
+        full = eps.filter { it.verified }
     }
     LaunchedEffect(id) {
         similar = runCatching { Tmdb.list(Tmdb.recommendationsRow(id, tv)) }.getOrDefault(emptyList()).take(15)
@@ -241,6 +250,7 @@ fun MovieScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         val first = full?.firstOrNull()
+                        val other = others.firstOrNull()
                         // Si no está gratis en YouTube, el botón lleva a la plataforma donde sí está
                         val w = d.watch
                         val platform = w?.free?.firstOrNull() ?: w?.subscription?.firstOrNull()
@@ -249,6 +259,7 @@ fun MovieScreen(
                         PillButton(
                             when {
                                 first != null -> if (tv) "Ver capítulo" else "Ver película"
+                                other != null && full != null && platformUrl == null -> if (tv) "Ver capítulo" else "Ver película"
                                 platform != null && platformUrl != null && full != null ->
                                     (if (w?.free?.isNotEmpty() == true) "Gratis en " else "Ver en ") + platform.name
                                 !Tmdb.mayBeFreeOnYoutube(d.movie) -> "Aún no está gratis"
@@ -257,11 +268,12 @@ fun MovieScreen(
                                 else -> "No disponible gratis"
                             },
                             Icons.Filled.PlayArrow, primary = true,
-                            enabled = first != null || (platformUrl != null && full != null),
+                            enabled = first != null || (full != null && (platformUrl != null || other != null)),
                             modifier = Modifier.weight(1f),
                         ) {
                             if (first != null) onVideo(first)
                             else if (platformUrl != null) openLink(context, platformUrl)
+                            else if (other != null) onVideo(other)
                         }
                         val key = d.trailerKey
                         PillButton("Tráiler", Icons.Outlined.Movie, primary = false, enabled = key != null, modifier = Modifier.weight(1f)) {
@@ -325,7 +337,7 @@ fun MovieScreen(
                         Text(if (tv) "Buscando capítulos de la temporada $season en YouTube…" else "Buscando la película completa en YouTube…", color = VColors.Secondary, fontSize = 13.sp,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     }
-                    f.isEmpty() -> item("full_none") {
+                    f.isEmpty() && others.isEmpty() -> item("full_none") {
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                             Text(
                                 if (tv && !Tmdb.mayBeFreeOnYoutube(d.movie))
@@ -350,6 +362,18 @@ fun MovieScreen(
                     }
                     else -> items(f, key = { "full:" + it.url }) { v ->
                         VideoCard(v, onClick = { onVideo(v) }, onChannel = {}, reason = (if (tv) "Capítulo completo · " else "Duración completa · ") + v.channelName + (if (v.verified) " ✓ canal verificado" else ""))
+                    }
+                }
+                if (f != null && others.isNotEmpty()) {
+                    item("others_t") {
+                        SectionTitle(
+                            "De otros canales (sin verificar)",
+                            subtitle = "Coinciden en título, duración e idioma, pero el canal no es oficial: " +
+                                "puede ser la " + (if (tv) "serie" else "película") + " completa o no.",
+                        )
+                    }
+                    items(others, key = { "other:" + it.url }) { v ->
+                        VideoCard(v, onClick = { onVideo(v) }, onChannel = {}, reason = "Sin verificar · " + v.channelName)
                     }
                 }
                 if (similar.isNotEmpty()) {

@@ -108,6 +108,8 @@ object Repository {
         minSec: Long = 0,
         noTrailers: Boolean = false,
         maxAgeDays: Long = 3650,
+        /** Con noTrailers: solo canales verificados (las listas); la ficha pide todos y los separa. */
+        onlyVerified: Boolean = false,
     ): PagedResult = withContext(Dispatchers.IO) {
         val handler = yt.searchQHFactory.fromQuery(query, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
         val info = SearchInfo.getInfo(yt, handler)
@@ -115,12 +117,17 @@ object Repository {
             v.durationSec >= minSec && (!noTrailers ||
                 // Películas y series completas: solo canales verificados, en español y sin reseñas ni narraciones
                 (!trailerWords.containsMatchIn(v.title) && !Tmdb.looksFake(v.title, v.channelName) &&
-                    v.verified && Tmdb.isSpanish(v.title)))
+                    (v.verified || !onlyVerified) && Tmdb.isSpanish(v.title)))
         }
         val page = freshPage(handler, info.relatedItems, info.nextPage, maxAgeDays, pagesLeft = if (noTrailers) 6 else if (minSec > 0) 4 else 2, keep = keep)
         // Películas y series completas: primero los canales verificados (distribuidoras oficiales)
         if (!noTrailers) page
-        else PagedResult(page.items.sortedByDescending { (it as? FeedEntry.Video)?.video?.verified == true }, page.loadMore)
+        else PagedResult(
+            page.items
+                .sortedByDescending { (it as? FeedEntry.Video)?.video?.verified == true }
+                .map { e -> if (e is FeedEntry.Video && !e.video.verified) FeedEntry.Video(e.video, "Canal sin verificar") else e },
+            page.loadMore,
+        )
     }
 
     private fun freshPage(
@@ -169,21 +176,31 @@ object Repository {
      *  - La duración tiene que parecerse a la de la película (±12 %).
      *  - Se descartan títulos y canales de reseñas, resúmenes, escenas, reacciones, etc.
      */
-    suspend fun fullMovie(detail: TmdbDetail): List<VideoItem> = withContext(Dispatchers.IO) {
+    /** Resultados de "película completa": de canales verificados y de otros canales. */
+    class FullMatches(val official: List<VideoItem>, val others: List<VideoItem>) {
+        val first get() = official.firstOrNull()
+        val isEmpty get() = official.isEmpty() && others.isEmpty()
+    }
+
+    suspend fun fullMovie(detail: TmdbDetail): FullMatches = withContext(Dispatchers.IO) {
         val movie = detail.movie
-        if (!Tmdb.mayBeFreeOnYoutube(movie) || Tmdb.isMajorStudio(detail)) return@withContext emptyList()
+        val none = FullMatches(emptyList(), emptyList())
+        if (!Tmdb.mayBeFreeOnYoutube(movie) || Tmdb.isMajorStudio(detail)) return@withContext none
         val runtimeSec = if (detail.runtimeMin > 0) detail.runtimeMin * 60L else 0L
         val minSec = if (runtimeSec > 0) (runtimeSec * 0.88).toLong() else 3600L
         val year = movie.year?.toString().orEmpty()
         val found = LinkedHashMap<String, VideoItem>()
         for (q in listOf("${movie.title} $year película completa en español", "${movie.title} película completa latino")) {
-            val r = runCatching { categorySearch(q, minSec = minSec, noTrailers = true) }.getOrNull() ?: continue
+            val r = runCatching { categorySearch(q, minSec = minSec, noTrailers = true, onlyVerified = false) }.getOrNull() ?: continue
             r.items.filterIsInstance<FeedEntry.Video>().map { it.video }
-                .filter { Tmdb.looksLikeFullMovie(it.title, it.channelName, it.durationSec, runtimeSec, movie, it.verified) }
+                .filter {
+                    Tmdb.looksLikeFullMovie(it.title, it.channelName, it.durationSec, runtimeSec, movie, it.verified, requireVerified = false)
+                }
                 .forEach { found.putIfAbsent(it.url, it) }
-            if (found.size >= 4) break
+            if (found.values.count { it.verified } >= 3) break
         }
-        found.values.toList()
+        val all = found.values.toList()
+        FullMatches(all.filter { it.verified }, all.filter { !it.verified }.take(8))
     }
 
     suspend fun seriesEpisodes(show: TmdbMovie, season: Int, episodeMin: Int): List<VideoItem> = withContext(Dispatchers.IO) {
@@ -196,11 +213,11 @@ object Repository {
         )
         val found = LinkedHashMap<String, VideoItem>()
         for (q in queries) {
-            val r = runCatching { categorySearch(q, minSec = minSec, noTrailers = true) }.getOrNull() ?: continue
+            val r = runCatching { categorySearch(q, minSec = minSec, noTrailers = true, onlyVerified = false) }.getOrNull() ?: continue
             r.items.filterIsInstance<FeedEntry.Video>().map { it.video }
                 .filter { v ->
                     Tmdb.matches(v.title, show) && !Tmdb.looksFake(v.title, v.channelName) &&
-                        v.verified && Tmdb.isSpanish(v.title) &&
+                        Tmdb.isSpanish(v.title) &&
                         // Un capítulo no dura el triple de lo normal (eso son recopilaciones o películas)
                         (epSec == 0L || v.durationSec <= epSec * 3)
                 }

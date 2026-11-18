@@ -402,12 +402,13 @@ object Tmdb {
     /** ¿Este video de YouTube parece de verdad la película completa? */
     fun looksLikeFullMovie(
         title: String, channel: String, durationSec: Long, runtimeSec: Long, movie: TmdbMovie, verified: Boolean,
+        requireVerified: Boolean = true,
     ): Boolean {
         if (!matches(title, movie)) return false
         if (looksFake(title, channel)) return false
-        // Solo canales verificados (distribuidoras) y en español: los canales pequeños con
-        // "película completa" en el título suelen ser narraciones o copias
-        if (!verified || !isSpanish(title)) return false
+        if (!isSpanish(title)) return false
+        // Los canales verificados (distribuidoras) son los confiables; los demás se muestran aparte
+        if (requireVerified && !verified) return false
         if (runtimeSec > 0) {
             val ratio = durationSec.toDouble() / runtimeSec
             if (ratio < 0.88 || ratio > 1.12) return false
