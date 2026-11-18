@@ -42,6 +42,18 @@ jobs:
           # Número de versión = cantidad de cambios en el repositorio (siempre sube)
           echo "VIDTUBE_BUILD=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
 
+      - name: Comprobar clave de TMDB
+        continue-on-error: true
+        env:
+          TMDB: ${{ secrets.VIDTUBE_TMDB_TOKEN }}
+        run: |
+          if [ -z "$TMDB" ]; then echo "TMDB: sin clave (la app la pedirá en Configuración)"; exit 0; fi
+          CODE=$(curl -s -o /tmp/tmdb.json -w "%{http_code}" -H "Authorization: Bearer $TMDB" \
+            "https://api.themoviedb.org/3/movie/603?language=es-MX")
+          echo "TMDB: respuesta HTTP $CODE"
+          python3 -c "import json;d=json.load(open('/tmp/tmdb.json'));print('TMDB: prueba ->', d.get('title'), d.get('release_date'))" || true
+          [ "$CODE" = "200" ]
+
       - name: Compilar APK firmado
         env:
           VIDTUBE_STORE_PASSWORD: ${{ secrets.VIDTUBE_STORE_PASSWORD }}
