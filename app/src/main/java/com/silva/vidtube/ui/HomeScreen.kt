@@ -303,6 +303,7 @@ fun HomeScreen(
         ) {
             key(vm.selected) {
                 val listState = rememberLazyListState()
+                if (moviesChip || seriesChip) KeepListAtTop(listState, moviesVm.rows.size)
                 // "Ver más" baja hasta la lista completa de videos
                 LaunchedEffect(scrollToFeed) {
                     if (scrollToFeed > 0) listState.animateScrollToItem(if (showTip) 4 else 3)

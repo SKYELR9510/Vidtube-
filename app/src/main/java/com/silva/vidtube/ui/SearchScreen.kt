@@ -183,7 +183,10 @@ fun SearchScreen(
         Box(Modifier.weight(1f)) {
         val results = vm.results
         if (vm.submitted != null && results != null) {
+            val listState = remember(results) { androidx.compose.foundation.lazy.LazyListState() }
+            KeepListAtTop(listState, moviesVm.rows.size + vm.movies.size + (if (vm.movieCategory || vm.seriesCategory) 1 else 0))
             FeedList(
+                state = listState,
                 paged = results,
                 onVideo = onVideo,
                 onChannel = onChannel,

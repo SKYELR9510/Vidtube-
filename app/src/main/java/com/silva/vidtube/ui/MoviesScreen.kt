@@ -80,7 +80,8 @@ class MoviesViewModel : ViewModel() {
         viewModelScope.launch {
             var any = false
             for (row in list) {
-                runCatching { Tmdb.list(row) }
+                // Dos páginas por fila: unas 40 películas o series en cada una
+                runCatching { (Tmdb.list(row) + runCatching { Tmdb.list(row, 2) }.getOrDefault(emptyList())).distinctBy { it.id } }
                     .onSuccess { rows[row.id] = it; any = true }
                     .onFailure { e -> if (!any) error = e.message ?: "No se pudo cargar TMDB." }
                 // Si la clave es mala no tiene sentido seguir pidiendo filas
@@ -442,3 +443,25 @@ private fun trailerItem(m: TmdbMovie, key: String) = VideoItem(
     uploaded = null,
     isLive = false,
 )
+
+/**
+ * Mientras el usuario no haya movido la lista, la mantiene arriba cuando llegan filas
+ * nuevas por encima (los pósters de TMDB suelen llegar después que los videos y la
+ * lista se quedaba anclada más abajo).
+ */
+@Composable
+fun KeepListAtTop(state: androidx.compose.foundation.lazy.LazyListState, trigger: Any?) {
+    val flags = remember(state) { booleanArrayOf(false, false) } // [0] tocada por el usuario, [1] scroll automático
+    LaunchedEffect(state) {
+        androidx.compose.runtime.snapshotFlow { state.isScrollInProgress }.collect { moving ->
+            if (moving && !flags[1]) flags[0] = true
+        }
+    }
+    LaunchedEffect(trigger) {
+        if (!flags[0] && (state.firstVisibleItemIndex > 0 || state.firstVisibleItemScrollOffset > 0)) {
+            flags[1] = true
+            state.scrollToItem(0)
+            flags[1] = false
+        }
+    }
+}
