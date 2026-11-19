@@ -335,7 +335,7 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
             <?= form_open('edit', $token, $back, 'grow') ?>
               <input type="hidden" name="id" value="<?= (int)$l['id'] ?>">
               <input type="text" name="name" value="<?= h($l['name']) ?>" aria-label="Nombre" class="name">
-              <input type="url" name="url" value="<?= h($l['url']) ?>" aria-label="Enlace" required>
+              <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url" value="<?= h($l['url']) ?>" aria-label="Enlace" required>
               <button class="btn ghost">Guardar</button>
             </form>
             <?= form_open('check', $token, $back) ?><input type="hidden" name="id" value="<?= (int)$l['id'] ?>"><button class="btn ghost">Verificar</button></form>
@@ -348,7 +348,7 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
           <input type="hidden" name="title" value="<?= h($t['title']) ?>"><input type="hidden" name="year" value="<?= h((string)($t['year'] ?? '')) ?>">
           <input type="hidden" name="poster" value="<?= h((string)($t['poster'] ?? '')) ?>">
           <input type="text" name="name" placeholder="Nombre (ej. Latino 1080p)" maxlength="80" class="name">
-          <input type="url" name="url" placeholder="https://… (Drive, Dropbox, .mp4, .m3u8, YouTube)" required>
+          <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url" placeholder="https://… (Drive, Dropbox, .mp4, .m3u8, YouTube)" required>
           <button class="btn"><?= icon('plus') ?>Agregar</button>
         </form>
       </div>
@@ -376,7 +376,7 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
             <input type="hidden" name="kind" value="<?= h($r['kind']) ?>"><input type="hidden" name="tmdb_id" value="<?= (int)$r['id'] ?>">
             <input type="hidden" name="title" value="<?= h($r['title']) ?>"><input type="hidden" name="year" value="<?= h((string)($r['year'] ?? '')) ?>">
             <input type="hidden" name="poster" value="<?= h((string)($r['poster'] ?? '')) ?>">
-            <input type="url" name="url" placeholder="https://…" required>
+            <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url" placeholder="https://…" required>
             <input type="text" name="name" placeholder="Nombre (ej. Latino HD)" maxlength="80">
             <button class="btn"><?= icon('plus') ?>Agregar</button>
           </form>
@@ -390,9 +390,9 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
       <h3>Nuevo canal</h3>
       <?= form_open('ch_add', $token, 'view=channels', 'chan') ?>
         <input type="text" name="name" placeholder="Nombre (ej. TV Perú)" maxlength="80" required>
-        <input type="url" name="url" placeholder="Enlace principal (.m3u8)">
-        <input type="url" name="url2" placeholder="Respaldo 1 (opcional)">
-        <input type="url" name="url3" placeholder="Respaldo 2 (opcional)">
+        <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url" placeholder="Enlace principal (.m3u8)">
+        <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url2" placeholder="Respaldo 1 (opcional)">
+        <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url3" placeholder="Respaldo 2 (opcional)">
         <input type="url" name="youtube" placeholder="Canal oficial de YouTube (opcional) https://www.youtube.com/@…">
         <input type="url" name="logo" placeholder="Logo https://… (opcional)">
         <input type="number" name="position" value="<?= count($data['channels']) + 1 ?>" aria-label="Orden" title="Orden">
@@ -402,6 +402,7 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
     <?php if (!$data['channels']): ?>
       <div class="empty card"><p>Todavía no hay canales. Aparecerán en Vidtube → TV abierta.</p></div>
     <?php else: ?>
+      <p class="muted">¿El canal necesita un reproductor específico? Agrega al final del enlace <code>|User-Agent=VLC/3.0.20&amp;Referer=https://sitio.com/</code> (formato de listas IPTV).</p>
       <p class="muted">Si el canal tiene su <b>canal oficial de YouTube</b> y está transmitiendo en vivo, la app usa YouTube. Si no, usa el enlace principal; si ese no funciona, pasa sola al respaldo 1 y luego al respaldo 2. En películas y series puedes agregar varios enlaces a un título: se prueban en orden.</p>
       <div class="channels"><?php foreach ($data['channels'] as $ch): ?>
         <div class="chcard">
@@ -409,9 +410,9 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
           <?= form_open('ch_edit', $token, 'view=channels', 'chform') ?>
             <input type="hidden" name="id" value="<?= (int)$ch['id'] ?>">
             <input type="text" name="name" value="<?= h($ch['name']) ?>" aria-label="Nombre" required>
-            <input type="url" name="url" value="<?= h($ch['url']) ?>" placeholder="Enlace principal (.m3u8)" aria-label="Enlace principal" title="Enlace principal">
-            <input type="url" name="url2" value="<?= h((string)($ch['url2'] ?? '')) ?>" placeholder="Respaldo 1 (opcional)" aria-label="Respaldo 1">
-            <input type="url" name="url3" value="<?= h((string)($ch['url3'] ?? '')) ?>" placeholder="Respaldo 2 (opcional)" aria-label="Respaldo 2">
+            <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url" value="<?= h($ch['url']) ?>" placeholder="Enlace principal (.m3u8)" aria-label="Enlace principal" title="Enlace principal">
+            <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url2" value="<?= h((string)($ch['url2'] ?? '')) ?>" placeholder="Respaldo 1 (opcional)" aria-label="Respaldo 1">
+            <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url3" value="<?= h((string)($ch['url3'] ?? '')) ?>" placeholder="Respaldo 2 (opcional)" aria-label="Respaldo 2">
             <input type="url" name="youtube" value="<?= h((string)($ch['youtube'] ?? '')) ?>" placeholder="Canal oficial de YouTube (opcional)" aria-label="Canal de YouTube" title="Si transmite en vivo, la app usa YouTube">
             <input type="url" name="logo" value="<?= h((string)$ch['logo']) ?>" placeholder="Logo https://…" aria-label="Logo">
             <div class="row2"><input type="number" name="position" value="<?= (int)$ch['position'] ?>" aria-label="Orden" title="Orden"><button class="btn ghost">Guardar</button></div>

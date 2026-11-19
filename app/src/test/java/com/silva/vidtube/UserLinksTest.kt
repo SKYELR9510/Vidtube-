@@ -41,4 +41,21 @@ class UserLinksTest {
         org.junit.Assert.assertTrue(UserLinks.isYoutube("https://m.youtube.com/watch?v=x"))
         org.junit.Assert.assertFalse(UserLinks.isYoutube(drive))
     }
+
+    @Test
+    fun enlacesIptvConCabeceras() {
+        val raw = "https://93.ejemplo.com/espn/mono.m3u8?token=abc|User-Agent=VLC/3.0.20 LibVLC&Referer=https://sitio.com/"
+        val n = UserLinks.normalize(raw)
+        assertEquals(raw, n)
+        val (url, h) = UserLinks.splitHeaders(n!!)
+        assertEquals("https://93.ejemplo.com/espn/mono.m3u8?token=abc", url)
+        assertEquals("VLC/3.0.20 LibVLC", h["User-Agent"])
+        assertEquals("https://sitio.com/", h["Referer"])
+        assertEquals("93.ejemplo.com", UserLinks.hostOf(n))
+        assertEquals(UserLink.Kind.VIDEO_FILE, UserLinks.kindOf(n))
+        // Cabeceras no permitidas se ignoran; el enlace sigue siendo válido
+        assertEquals("https://a.pe/x.m3u8", UserLinks.normalize("https://a.pe/x.m3u8|Authorization=secreto"))
+        // Con espacios en el enlace (antes del «|») no es válido
+        assertNull(UserLinks.normalize("https://a.pe/x y.m3u8|User-Agent=VLC"))
+    }
 }

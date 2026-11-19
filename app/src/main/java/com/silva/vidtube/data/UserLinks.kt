@@ -66,8 +66,38 @@ object UserLinks {
      * Solo enlaces web (http/https) con un dominio: nada de javascript:, intent:, file: ni
      * content:, que podrían abrir cosas del celular en vez de una página.
      */
+    /** Cabeceras que se aceptan en los enlaces de listas IPTV (formato `enlace|User-Agent=…&Referer=…`). */
+    private val allowedHeaders = mapOf(
+        "user-agent" to "User-Agent", "referer" to "Referer", "referrer" to "Referer",
+        "origin" to "Origin", "cookie" to "Cookie",
+    )
+
+    /**
+     * Separa el enlace de sus cabeceras al estilo IPTV/Kodi: `https://…/canal.m3u8|User-Agent=VLC&Referer=https://…`.
+     * Devuelve (enlace, cabeceras). Solo se aceptan User-Agent, Referer, Origin y Cookie.
+     */
+    fun splitHeaders(raw: String): Pair<String, Map<String, String>> {
+        val i = raw.indexOf('|')
+        if (i < 0) return raw to emptyMap()
+        val headers = LinkedHashMap<String, String>()
+        raw.substring(i + 1).split('&').forEach { part ->
+            val eq = part.indexOf('=')
+            if (eq <= 0) return@forEach
+            val key = allowedHeaders[part.substring(0, eq).trim().lowercase()] ?: return@forEach
+            val value = runCatching { java.net.URLDecoder.decode(part.substring(eq + 1), "UTF-8") }
+                .getOrDefault(part.substring(eq + 1)).trim()
+            if (value.isNotEmpty() && value.length <= 400 && value.none { it.code < 0x20 }) headers[key] = value
+        }
+        return raw.substring(0, i) to headers
+    }
+
     fun normalize(raw: String): String? {
-        val s = raw.trim()
+        val trimmed = raw.trim()
+        // Las cabeceras IPTV (después de «|») pueden tener espacios; el enlace en sí no
+        val pipe = trimmed.indexOf('|')
+        val options = if (pipe >= 0) trimmed.substring(pipe + 1).trim() else ""
+        if (options.length > 600 || options.any { it.code < 0x20 }) return null
+        val s = if (pipe >= 0) trimmed.substring(0, pipe).trim() else trimmed
         if (s.isEmpty() || s.length > 2000 || s.any { it.isWhitespace() || it.code < 0x20 }) return null
         val withScheme = if (Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:").containsMatchIn(s)) s else "https://$s"
         val uri = runCatching { java.net.URI(withScheme) }.getOrNull() ?: return null
@@ -75,13 +105,14 @@ object UserLinks {
         if (scheme != "https" && scheme != "http") return null
         val host = uri.host ?: return null
         if (!host.contains('.')) return null
-        return withScheme
+        return if (options.isNotEmpty() && splitHeaders("x|$options").second.isNotEmpty()) "$withScheme|$options" else withScheme
     }
 
     fun hostOf(url: String): String =
-        runCatching { java.net.URI(url).host.removePrefix("www.").removePrefix("m.") }.getOrNull() ?: url
+        runCatching { java.net.URI(url.substringBefore('|')).host.removePrefix("www.").removePrefix("m.") }.getOrNull() ?: url
 
-    fun kindOf(url: String): UserLink.Kind {
+    fun kindOf(rawUrl: String): UserLink.Kind {
+        val url = rawUrl.substringBefore('|')
         val host = hostOf(url).lowercase()
         // Google Drive y Dropbox se convierten en enlaces directos al archivo
         if (driveId(url) != null || host == "dropbox.com" || host.endsWith(".dropbox.com") ||
@@ -111,7 +142,12 @@ object UserLinks {
      *  - Dropbox: ?raw=1 en vez de la página de vista previa.
      *  - Lo demás queda igual.
      */
-    fun directUrl(url: String): String {
+    fun directUrl(rawUrl: String): String {
+        val suffix = rawUrl.indexOf('|').let { if (it >= 0) rawUrl.substring(it) else "" }
+        return directBase(rawUrl.substringBefore('|')) + suffix
+    }
+
+    private fun directBase(url: String): String {
         driveId(url)?.let { return "https://drive.usercontent.google.com/download?id=$it&export=download&confirm=t" }
         val host = hostOf(url).lowercase()
         if (host == "dropbox.com" || host.endsWith(".dropbox.com")) {

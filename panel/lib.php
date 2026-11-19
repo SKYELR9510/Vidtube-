@@ -67,9 +67,19 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES 
 
 function now(): string { return gmdate('Y-m-d H:i:s'); }
 
-/** Solo enlaces http/https con dominio (mismas reglas que la app). */
+/**
+ * Solo enlaces http/https con dominio (mismas reglas que la app). Acepta cabeceras al estilo
+ * IPTV después de «|»: https://…/canal.m3u8|User-Agent=VLC/3.0&Referer=https://…
+ */
 function clean_url(string $raw): ?string {
     $s = trim($raw);
+    $opts = '';
+    $pipe = strpos($s, '|');
+    if ($pipe !== false) {
+        $opts = trim(substr($s, $pipe + 1));
+        $s = trim(substr($s, 0, $pipe));
+        if (strlen($opts) > 600 || preg_match('/[\x00-\x1F]/', $opts)) return null;
+    }
     if ($s === '' || strlen($s) > 2000 || preg_match('/\s|[\x00-\x1F]/', $s)) return null;
     if (!preg_match('~^[a-z][a-z0-9+.-]*:~i', $s)) $s = 'https://' . $s;
     $p = parse_url($s);
@@ -77,7 +87,24 @@ function clean_url(string $raw): ?string {
     $scheme = strtolower($p['scheme']);
     if ($scheme !== 'http' && $scheme !== 'https') return null;
     if (strpos($p['host'], '.') === false) return null;
-    return $s;
+    return $opts !== '' && link_headers('x|' . $opts) ? $s . '|' . $opts : $s;
+}
+
+/** Cabeceras IPTV permitidas de un enlace (User-Agent, Referer, Origin, Cookie). */
+function link_headers(string $url): array {
+    $pipe = strpos($url, '|');
+    if ($pipe === false) return [];
+    $allowed = ['user-agent' => 'User-Agent', 'referer' => 'Referer', 'referrer' => 'Referer', 'origin' => 'Origin', 'cookie' => 'Cookie'];
+    $out = [];
+    foreach (explode('&', substr($url, $pipe + 1)) as $part) {
+        $eq = strpos($part, '=');
+        if ($eq === false || $eq === 0) continue;
+        $k = strtolower(trim(substr($part, 0, $eq)));
+        if (!isset($allowed[$k])) continue;
+        $v = trim(urldecode(substr($part, $eq + 1)));
+        if ($v !== '' && strlen($v) <= 400 && !preg_match('/[\x00-\x1F]/', $v)) $out[$allowed[$k]] = $v;
+    }
+    return $out;
 }
 
 // ---------- Sesión, inicio de sesión y CSRF ----------
@@ -190,26 +217,41 @@ function tmdb_details(string $kind, int $id): ?array {
     ];
 }
 
-/** ¿El enlace responde? Devuelve [ok, texto]. Solo para el administrador (pide la cabecera). */
+/** ¿El enlace responde? Devuelve [ok, texto]. Prueba también como VLC, como hace la app. */
 function check_url(string $url): array {
     $u = clean_url($url);
     if ($u === null) return [false, 'Enlace no válido'];
-    $ch = curl_init($u);
-    curl_setopt_array($ch, [
-        CURLOPT_NOBODY => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
-        CURLOPT_TIMEOUT => 12, CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Linux; Android 14) VidtubePanel',
-    ]);
-    curl_exec($ch);
-    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $type = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-    $err = curl_error($ch);
-    curl_close($ch);
-    if ($code === 0) return [false, 'No responde' . ($err ? " ($err)" : '')];
-    if ($code >= 400) return [false, "Responde con error HTTP $code"];
-    $kind = stripos($type, 'video') !== false ? 'video' : (stripos($type, 'mpegurl') !== false ? 'señal en vivo' : ($type ?: 'contenido'));
-    return [true, "Funciona (HTTP $code · $kind)"];
+    $headers = link_headers($u);
+    $base = explode('|', $u, 2)[0];
+    $agents = isset($headers['User-Agent']) ? [$headers['User-Agent']]
+        : ['Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36', 'VLC/3.0.20 LibVLC/3.0.20'];
+    $last = [false, 'No responde'];
+    foreach ($agents as $i => $ua) {
+        $h = [];
+        foreach ($headers as $k => $v) if ($k !== 'User-Agent') $h[] = "$k: $v";
+        $ch = curl_init($base);
+        curl_setopt_array($ch, [
+            CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5, CURLOPT_TIMEOUT => 12, CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_RANGE => '0-2047', // basta con el inicio (la lista .m3u8 o los primeros bytes del video)
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_USERAGENT => $ua, CURLOPT_HTTPHEADER => $h,
+        ]);
+        $body = (string)curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $type = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $err = curl_error($ch);
+        curl_close($ch);
+        if ($code === 0) { $last = [false, 'No responde' . ($err ? " ($err)" : '')]; continue; }
+        if ($code >= 400) {
+            $why = $code === 403 ? ' — el enlace venció (token) o el servidor bloquea la conexión'
+                : ($code === 404 ? ' — el enlace ya no existe' : '');
+            $last = [false, "Error HTTP $code$why"];
+            continue;
+        }
+        $kind = strpos($body, '#EXTM3U') === 0 ? 'lista de señal HLS' : (stripos($type, 'video') !== false ? 'video' : ($type ?: 'contenido'));
+        return [true, "Funciona (HTTP $code · $kind" . ($i > 0 ? ' · solo como VLC: la app lo hará sola' : '') . ')'];
+    }
+    return $last;
 }
 
 /** Comprobaciones de la instalación para la sección Diagnóstico. */

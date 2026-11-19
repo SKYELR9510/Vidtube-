@@ -160,25 +160,65 @@ object PlayerHolder {
      * Reproduce un enlace propio (Drive, Dropbox, .mp4, .m3u8…) en el mismo reproductor.
      * Se usa un acceso HTTP normal (no el de YouTube) que sigue redirecciones.
      */
-    fun playDirect(context: Context, url: String, startMs: Long) {
+    /**
+     * Identidades con las que se piden las señales directas. Muchos servidores IPTV rechazan
+     * (403) a ciertos reproductores: si uno falla, se prueba el siguiente.
+     */
+    private val directAgents = listOf(
+        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36",
+        "VLC/3.0.20 LibVLC/3.0.20",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "okhttp/4.12.0",
+    )
+    val directAgentCount get() = directAgents.size
+
+    /** Código HTTP de un error de reproducción (403, 404…), o null si no fue un error HTTP. */
+    fun httpStatusOf(e: Throwable?): Int? {
+        var c: Throwable? = e
+        while (c != null) {
+            if (c is com.google.android.exoplayer2.upstream.HttpDataSource.InvalidResponseCodeException) return c.responseCode
+            c = c.cause
+        }
+        return null
+    }
+
+    /**
+     * Reproduce un enlace propio o del panel (Drive, Dropbox, .mp4, .m3u8…) en el mismo reproductor.
+     * Acepta cabeceras al estilo IPTV (`enlace|User-Agent=…&Referer=…`). [agent] elige la identidad
+     * con que se pide (si el enlace no trae su propio User-Agent); la 2.ª y siguientes envían
+     * también Referer y Origin del mismo sitio, que algunos servidores exigen.
+     */
+    fun playDirect(context: Context, rawUrl: String, startMs: Long, agent: Int = 0) {
         Chapters.set(emptyList())
         subtitleLanguage.value = null
         sourceMode = 0
         lastLoadError = null
+        val (url, linkHeaders) = com.silva.vidtube.data.UserLinks.splitHeaders(rawUrl)
+        val headers = LinkedHashMap<String, String>()
+        StreamSniffer.pendingHeaders[rawUrl]?.let { headers.putAll(it) }
+        if (agent >= 2 && linkHeaders["Referer"] == null) {
+            val u = Uri.parse(url)
+            if (u.scheme != null && u.host != null) {
+                val origin = "${u.scheme}://${u.host}" + (if (u.port > 0) ":${u.port}" else "")
+                headers["Referer"] = "$origin/"
+                headers["Origin"] = origin
+            }
+        }
+        headers.putAll(linkHeaders.filterKeys { it != "User-Agent" })
         val http = com.google.android.exoplayer2.upstream.DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36")
+            .setUserAgent(linkHeaders["User-Agent"] ?: directAgents[agent.coerceIn(0, directAgents.lastIndex)])
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(20_000)
-        // Señales de TV: mismas cabeceras (Referer, Origin, cookies) con que las pide su página oficial
-        StreamSniffer.pendingHeaders[url]?.let { http.setDefaultRequestProperties(it) }
+        if (headers.isNotEmpty()) http.setDefaultRequestProperties(headers)
         val item = MediaItem.fromUri(Uri.parse(url))
         val path = Uri.parse(url).path.orEmpty().lowercase()
         val source = when {
-            path.endsWith(".m3u8") || url.contains("m3u8", ignoreCase = true) ->
-                HlsMediaSource.Factory(http).createMediaSource(item)
+            path.endsWith(".m3u8") || path.endsWith(".m3u") || url.contains("m3u8", ignoreCase = true) ->
+                HlsMediaSource.Factory(http).setAllowChunklessPreparation(true).createMediaSource(item)
             path.endsWith(".mpd") ->
                 DashMediaSource.Factory(DefaultDashChunkSource.Factory(http), http).createMediaSource(item)
+            // .mp4, .ts (canales IPTV en MPEG-TS), .mkv…
             else -> ProgressiveMediaSource.Factory(http).createMediaSource(item)
         }
         val p = player(context)

@@ -67,6 +67,21 @@ object NowPlaying {
     val alternates = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
     private val directQueue = ArrayDeque<String>()
     private var directJob: Job? = null
+    /** Enlace directo que suena ahora e identidad con que se pidió (ver PlayerHolder.playDirect). */
+    private var directCurrent: String? = null
+    private var directAgent = 0
+
+    /** Mensaje claro según el error HTTP del servidor del canal. */
+    private fun directError(code: Int?): String = when (code) {
+        401 -> "Esta señal pide usuario y contraseña (error 401). Revisa el enlace en el panel."
+        403 -> "El servidor de esta señal rechazó la conexión (error 403). Suele pasar cuando el enlace venció " +
+            "(los que llevan ?token=… caducan) o el servidor solo acepta ciertos reproductores. Actualiza el enlace en el panel."
+        404, 410 -> "El enlace de esta señal ya no existe (error $code). Actualiza el enlace en el panel."
+        429 -> "El servidor de esta señal está recibiendo demasiadas conexiones (error 429). Intenta en unos minutos."
+        in 500..599 -> "El servidor de esta señal tiene problemas (error $code). Intenta más tarde."
+        null -> "No se pudo conectar con esta señal. Revisa tu internet o intenta más tarde."
+        else -> "La señal respondió con un error (HTTP $code). Revisa el enlace en el panel."
+    }
 
     /** Pasa al siguiente enlace de respaldo. false si ya no quedan. */
     private fun nextDirect(context: Context): Boolean {
@@ -75,6 +90,8 @@ object NowPlaying {
         val pos = if (s.video.isLive) 0L else (PlayerHolder.playerOrNull?.currentPosition ?: 0L)
         Log.w("Vidtube", "Enlace sin respuesta; uso el de respaldo")
         android.widget.Toast.makeText(context, "Cambiando a otra señal…", android.widget.Toast.LENGTH_SHORT).show()
+        directCurrent = next
+        directAgent = 0
         runCatching { PlayerHolder.playDirect(context, com.silva.vidtube.data.UserLinks.directUrl(next), pos) }
         return true
     }
@@ -128,6 +145,8 @@ object NowPlaying {
             _state.value = State(video = video, loading = false, quality = quality)
             directQueue.clear()
             directQueue.addAll(alternates[video.url].orEmpty())
+            directCurrent = video.url
+            directAgent = 0
             runCatching {
                 PlayerHolder.playDirect(appContext, com.silva.vidtube.data.UserLinks.directUrl(video.url), Library.position(video.url))
             }.onFailure { e ->
@@ -213,7 +232,25 @@ object NowPlaying {
             // Enlace propio o del panel que falla: se pasa solo al de respaldo
             override fun onPlayerError(error: com.google.android.exoplayer2.PlaybackException) {
                 val s = _state.value ?: return
-                if (!com.silva.vidtube.data.UserLinks.isYoutube(s.video.url)) nextDirect(context)
+                if (com.silva.vidtube.data.UserLinks.isYoutube(s.video.url)) return
+                val code = PlayerHolder.httpStatusOf(error)
+                val current = directCurrent
+                // 1º: el servidor rechazó la petición (403, 401…): se reintenta presentándose como
+                //     otro reproductor (VLC, navegador de PC…), salvo que el enlace traiga su propio User-Agent
+                if (current != null && code != null && code in 400..499 && code != 404 && code != 410 &&
+                    directAgent < PlayerHolder.directAgentCount - 1 &&
+                    com.silva.vidtube.data.UserLinks.splitHeaders(current).second["User-Agent"] == null
+                ) {
+                    directAgent++
+                    Log.w("Vidtube", "Señal rechazada (HTTP $code); reintento con otra identidad ($directAgent)")
+                    val pos = if (s.video.isLive) 0L else (PlayerHolder.playerOrNull?.currentPosition ?: 0L)
+                    runCatching { PlayerHolder.playDirect(context, com.silva.vidtube.data.UserLinks.directUrl(current), pos, directAgent) }
+                    return
+                }
+                // 2º: el enlace de respaldo; 3º: explicar el problema
+                if (!nextDirect(context)) {
+                    _state.value = _state.value?.copy(error = directError(code))
+                }
             }
 
             // El botón ■ de la notificación vacía el reproductor: cerramos el video
