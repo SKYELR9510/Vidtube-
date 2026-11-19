@@ -38,6 +38,23 @@ if ($action === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     go('');
 }
 
+// ---------- Descargas: plantilla y exportación de canales ----------
+if (logged_in() && $view === 'template') {
+    send_csv('plantilla-canales.csv', [
+        channel_columns(),
+        ['TV Perú', 'https://ejemplo.com/tvperu/index.m3u8', 'https://respaldo.com/tvperu.m3u8', '', 'https://www.youtube.com/@tvperu', 'https://ejemplo.com/logo-tvperu.png', '', 'Noticias', 'si', '1'],
+        ['ESPN', 'https://ejemplo.com/espn.m3u8|User-Agent=VLC/3.0.20', '', '', '', 'https://ejemplo.com/espn.png', 'https://ejemplo.com/espn-portada.jpg', 'Deportes', 'no', '2'],
+    ]);
+}
+if (logged_in() && $view === 'export') {
+    $rows = [channel_columns()];
+    foreach (db()->query('SELECT * FROM vt_channels ORDER BY position, name')->fetchAll() as $ch) {
+        $rows[] = [$ch['name'], $ch['url'], $ch['url2'] ?? '', $ch['url3'] ?? '', $ch['youtube'] ?? '', $ch['logo'] ?? '',
+            $ch['cover'] ?? '', $ch['category'] ?? 'General', !empty($ch['national']) ? 'si' : 'no', (string)$ch['position']];
+    }
+    send_csv('canales-vidtube-' . date('Y-m-d') . '.csv', $rows);
+}
+
 // ---------- Acciones con sesión (todas por POST + CSRF; después se redirige) ----------
 if (logged_in() && $_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
     check_csrf();
@@ -130,6 +147,21 @@ if (logged_in() && $_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                         ->execute([$name, $url, $b['url2'], $b['url3'], $yt, $logo, $cat, $national, $cover, $pos, now(), (int)$_POST['id']]);
                     flash('ok', 'Canal actualizado.');
                 }
+                $back = 'view=channels';
+                break;
+            case 'ch_import':
+                $f = $_FILES['file'] ?? null;
+                if (!$f || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) { flash('bad', 'Elige un archivo para importar.'); break; }
+                if ($f['size'] > 5 * 1024 * 1024) { flash('bad', 'El archivo pesa más de 5 MB.'); break; }
+                $ext = strtolower(pathinfo((string)$f['name'], PATHINFO_EXTENSION));
+                if ($ext === 'xlsx') $rows = read_xlsx($f['tmp_name']);
+                elseif ($ext === 'csv' || $ext === 'txt') $rows = read_csv($f['tmp_name']);
+                elseif ($ext === 'm3u' || $ext === 'm3u8') $rows = read_m3u($f['tmp_name']);
+                else { flash('bad', 'Usa un archivo de Excel (.xlsx), CSV o una lista .m3u. Si tienes un .xls antiguo, guárdalo como .xlsx.'); break; }
+                [$added, $updated, $errs] = import_channels($rows);
+                $text = "Importación lista: $added canales agregados y $updated actualizados.";
+                if ($errs) $text .= ' ' . count($errs) . ' filas con problemas: ' . implode(' ', array_slice($errs, 0, 8)) . (count($errs) > 8 ? ' …' : '');
+                flash($errs && !$added && !$updated ? 'bad' : 'ok', $text);
                 $back = 'view=channels';
                 break;
             case 'ch_delete':
@@ -390,7 +422,24 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
     <?php endforeach; ?></div>
 
 <?php elseif ($view === 'channels' && !$fatal): ?>
-    <header class="top"><h1>Canales de TV <span class="count"><?= count($data['channels']) ?></span></h1></header>
+    <header class="top"><h1>Canales de TV <span class="count"><?= count($data['channels']) ?></span></h1>
+      <a class="btn ghost" href="?view=export">Exportar a Excel</a></header>
+    <div class="card import">
+      <h3>Subir muchos canales a la vez</h3>
+      <p class="muted">Llena la plantilla en Excel (una fila por canal) y súbela. Los canales nuevos se agregan y los que ya existen
+        (mismo nombre) se actualizan. También acepta CSV y listas <code>.m3u</code>.</p>
+      <form method="post" enctype="multipart/form-data" class="row-import">
+        <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="ch_import">
+        <input type="hidden" name="back" value="view=channels">
+        <input type="file" name="file" accept=".xlsx,.csv,.m3u,.m3u8,text/csv" required>
+        <button class="btn">Importar</button>
+        <a class="btn ghost" href="plantilla-canales.xlsx" download>Plantilla de Excel</a>
+        <a class="btn ghost" href="?view=template">Plantilla CSV</a>
+      </form>
+      <p class="muted small">Columnas: <code>nombre</code>, <code>enlace</code>, <code>respaldo1</code>, <code>respaldo2</code>, <code>youtube</code>,
+        <code>logo</code>, <code>portada</code>, <code>categoria</code> (General, Noticias, Deportes, Música, Infantil, Películas, Entretenimiento),
+        <code>nacional</code> (si/no) y <code>orden</code>. Solo «nombre» y «enlace» (o «youtube») son obligatorias.</p>
+    </div>
     <div class="card">
       <h3>Nuevo canal</h3>
       <?= form_open('ch_add', $token, 'view=channels', 'chan') ?>

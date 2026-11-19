@@ -85,3 +85,5 @@ form.chan{display:grid;grid-template-columns:1fr 1.6fr 1.6fr 1fr;gap:8px}form.ch
 select{font:inherit;color:var(--text);background:var(--raise);border:1px solid var(--line);border-radius:10px;padding:9px 10px;width:100%}
 .chk{display:flex;align-items:center;gap:8px;color:var(--sec);font-size:13px;margin:0;white-space:nowrap}.chk input{width:auto;margin:0}
 .chcard .logo i{background:rgba(11,12,16,.85)}
+.row-import{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}.row-import input[type=file]{flex:1;min-width:220px;padding:8px}
+.small{font-size:12px}.import code{font-size:12px}

@@ -289,3 +289,237 @@ function panel_base_url(): string {
     $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
     return 'https://' . $host . $dir . '/';
 }
+
+// ---------- Importar y exportar canales (Excel, CSV o lista M3U) ----------
+
+/** Columnas de la plantilla, en orden. */
+function channel_columns(): array {
+    return ['nombre', 'enlace', 'respaldo1', 'respaldo2', 'youtube', 'logo', 'portada', 'categoria', 'nacional', 'orden'];
+}
+
+/** Nombre de columna escrito de cualquier forma → columna de la plantilla (o null). */
+function channel_column(string $h): ?string {
+    $k = strtolower(trim($h));
+    $k = strtr($k, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n']);
+    $k = preg_replace('/[^a-z0-9]/', '', $k);
+    $map = [
+        'nombre' => 'nombre', 'name' => 'nombre', 'canal' => 'nombre', 'titulo' => 'nombre',
+        'enlace' => 'enlace', 'url' => 'enlace', 'link' => 'enlace', 'senal' => 'enlace', 'enlaceprincipal' => 'enlace', 'principal' => 'enlace', 'm3u8' => 'enlace',
+        'respaldo1' => 'respaldo1', 'respaldo' => 'respaldo1', 'backup1' => 'respaldo1', 'backup' => 'respaldo1', 'url2' => 'respaldo1',
+        'respaldo2' => 'respaldo2', 'backup2' => 'respaldo2', 'url3' => 'respaldo2',
+        'youtube' => 'youtube', 'canaldeyoutube' => 'youtube', 'canaloficialdeyoutube' => 'youtube', 'yt' => 'youtube',
+        'logo' => 'logo', 'tvglogo' => 'logo', 'imagen' => 'logo',
+        'portada' => 'portada', 'cover' => 'portada', 'fondo' => 'portada',
+        'categoria' => 'categoria', 'category' => 'categoria', 'grupo' => 'categoria', 'grouptitle' => 'categoria', 'genero' => 'categoria',
+        'nacional' => 'nacional', 'national' => 'nacional', 'peru' => 'nacional',
+        'orden' => 'orden', 'position' => 'orden', 'posicion' => 'orden', 'order' => 'orden',
+    ];
+    return $map[$k] ?? null;
+}
+
+/** Lee la primera hoja de un .xlsx (sin librerías: es un zip con XML). Devuelve filas de textos. */
+function read_xlsx(string $path): array {
+    if (!class_exists('ZipArchive')) throw new RuntimeException('Tu hosting no tiene la extensión zip de PHP: guarda el Excel como CSV y súbelo así.');
+    $zip = new ZipArchive();
+    if ($zip->open($path) !== true) throw new RuntimeException('No se pudo abrir el archivo de Excel.');
+    $strings = [];
+    if (($xml = $zip->getFromName('xl/sharedStrings.xml')) !== false) {
+        $sx = simplexml_load_string($xml, 'SimpleXMLElement', LIBXML_NONET);
+        foreach ($sx->si as $si) {
+            $t = '';
+            if (isset($si->t)) $t = (string)$si->t;
+            foreach ($si->r as $r) $t .= (string)$r->t;
+            $strings[] = $t;
+        }
+    }
+    // Primera hoja según el libro (por si no se llama sheet1.xml)
+    $sheet = 'xl/worksheets/sheet1.xml';
+    $wb = $zip->getFromName('xl/workbook.xml');
+    $rels = $zip->getFromName('xl/_rels/workbook.xml.rels');
+    if ($wb !== false && $rels !== false) {
+        $w = simplexml_load_string($wb, 'SimpleXMLElement', LIBXML_NONET);
+        $first = $w->sheets->sheet[0] ?? null;
+        if ($first) {
+            $rid = (string)$first->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships')['id'];
+            $r = simplexml_load_string($rels, 'SimpleXMLElement', LIBXML_NONET);
+            foreach ($r->Relationship as $rel) {
+                if ((string)$rel['Id'] === $rid) {
+                    $target = ltrim((string)$rel['Target'], '/');
+                    $sheet = strpos($target, 'xl/') === 0 ? $target : 'xl/' . $target;
+                }
+            }
+        }
+    }
+    $xml = $zip->getFromName($sheet);
+    $zip->close();
+    if ($xml === false) throw new RuntimeException('El Excel no tiene hojas con datos.');
+    $sx = simplexml_load_string($xml, 'SimpleXMLElement', LIBXML_NONET);
+    $rows = [];
+    foreach ($sx->sheetData->row as $row) {
+        $cells = [];
+        foreach ($row->c as $c) {
+            $ref = (string)$c['r'];
+            $col = 0;
+            for ($i = 0; $i < strlen($ref) && ctype_alpha($ref[$i]); $i++) $col = $col * 26 + (ord(strtoupper($ref[$i])) - 64);
+            $type = (string)$c['t'];
+            if ($type === 's') $v = $strings[(int)$c->v] ?? '';
+            elseif ($type === 'inlineStr') $v = (string)$c->is->t;
+            elseif ($type === 'b') $v = ((string)$c->v) === '1' ? 'si' : 'no';
+            else $v = (string)$c->v;
+            $cells[max(0, $col - 1)] = $v;
+        }
+        if ($cells) {
+            $max = max(array_keys($cells));
+            $line = [];
+            for ($i = 0; $i <= $max; $i++) $line[] = trim((string)($cells[$i] ?? ''));
+            $rows[] = $line;
+        }
+    }
+    return $rows;
+}
+
+/** Lee un CSV (separado por ; , o tabulación, como lo guarda Excel). */
+function read_csv(string $path): array {
+    $text = (string)file_get_contents($path);
+    if (strncmp($text, "\xEF\xBB\xBF", 3) === 0) $text = substr($text, 3);
+    if (!mb_check_encoding($text, 'UTF-8')) $text = mb_convert_encoding($text, 'UTF-8', 'Windows-1252');
+    $firstLine = strtok($text, "\n");
+    $sep = ';';
+    $best = 0;
+    foreach ([';', ',', "\t"] as $s) { $n = substr_count((string)$firstLine, $s); if ($n > $best) { $best = $n; $sep = $s; } }
+    $fh = fopen('php://memory', 'r+');
+    fwrite($fh, $text);
+    rewind($fh);
+    $rows = [];
+    while (($r = fgetcsv($fh, 0, $sep, '"', '\\')) !== false) {
+        if ($r === [null]) continue;
+        $rows[] = array_map(function ($v) { return trim((string)$v); }, $r);
+    }
+    fclose($fh);
+    return $rows;
+}
+
+/** Lee una lista .m3u de IPTV: nombre, logo, grupo (categoría) y cabeceras #EXTVLCOPT. */
+function read_m3u(string $path): array {
+    $rows = [['nombre', 'enlace', 'logo', 'categoria']];
+    $name = $logo = $group = '';
+    $opts = [];
+    foreach (preg_split('/\r?\n/', (string)file_get_contents($path)) as $line) {
+        $line = trim($line);
+        if ($line === '' || $line === '#EXTM3U') continue;
+        if (stripos($line, '#EXTINF') === 0) {
+            $name = trim((string)substr($line, (int)strrpos($line, ',') + 1));
+            $logo = preg_match('/tvg-logo="([^"]*)"/i', $line, $m) ? $m[1] : '';
+            $group = preg_match('/group-title="([^"]*)"/i', $line, $m) ? $m[1] : '';
+            $opts = [];
+        } elseif (stripos($line, '#EXTVLCOPT:http-user-agent=') === 0) {
+            $opts['User-Agent'] = substr($line, 27);
+        } elseif (stripos($line, '#EXTVLCOPT:http-referrer=') === 0) {
+            $opts['Referer'] = substr($line, 25);
+        } elseif ($line[0] !== '#') {
+            $url = $line;
+            if ($opts && strpos($url, '|') === false) {
+                $url .= '|' . implode('&', array_map(function ($k, $v) { return $k . '=' . $v; }, array_keys($opts), $opts));
+            }
+            if ($name !== '') $rows[] = [$name, $url, $logo, $group];
+            $name = $logo = $group = '';
+            $opts = [];
+        }
+    }
+    return $rows;
+}
+
+/** Categoría escrita libremente (o el grupo de una lista M3U) → una de las del panel. */
+function guess_category(string $raw): string {
+    $k = strtolower(strtr(trim($raw), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u']));
+    foreach (channel_categories() as $c) {
+        if ($k === strtolower(strtr($c, ['ú' => 'u', 'í' => 'i']))) return $c;
+    }
+    if (preg_match('/news|notic/', $k)) return 'Noticias';
+    if (preg_match('/sport|deport|futbol|football|soccer/', $k)) return 'Deportes';
+    if (preg_match('/music|musica|radio/', $k)) return 'Música';
+    if (preg_match('/kid|infantil|nino|cartoon|anima/', $k)) return 'Infantil';
+    if (preg_match('/movie|pelic|cine/', $k)) return 'Películas';
+    if (preg_match('/entert|entreten|series|show/', $k)) return 'Entretenimiento';
+    return 'General';
+}
+
+/**
+ * Importa canales desde filas (la primera fila = nombres de columna). Si un canal con el mismo
+ * nombre ya existe se actualiza; si no, se agrega. Devuelve [agregados, actualizados, errores[]].
+ */
+function import_channels(array $rows): array {
+    if (count($rows) < 2) throw new RuntimeException('El archivo no tiene filas de canales (la primera fila deben ser los nombres de columna).');
+    $cols = [];
+    foreach ($rows[0] as $i => $h) { $c = channel_column((string)$h); if ($c !== null && !isset($cols[$c])) $cols[$c] = $i; }
+    if (!isset($cols['nombre'])) throw new RuntimeException('Falta la columna «nombre». Usa la plantilla.');
+    if (!isset($cols['enlace']) && !isset($cols['youtube'])) throw new RuntimeException('Falta la columna «enlace» (o «youtube»). Usa la plantilla.');
+    $pdo = db();
+    $existing = [];
+    foreach ($pdo->query('SELECT id, name, position FROM vt_channels')->fetchAll() as $r) $existing[mb_strtolower(trim($r['name']))] = $r;
+    $next = (int)$pdo->query('SELECT COALESCE(MAX(position), 0) FROM vt_channels')->fetchColumn();
+    $added = $updated = 0;
+    $errors = [];
+    $ins = $pdo->prepare('INSERT INTO vt_channels (name, url, url2, url3, youtube, logo, cover, category, national, position, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+    $upd = $pdo->prepare('UPDATE vt_channels SET url = ?, url2 = ?, url3 = ?, youtube = ?, logo = ?, cover = ?, category = ?, national = ?, position = ?, updated_at = ? WHERE id = ?');
+    $pdo->beginTransaction();
+    try {
+        foreach (array_slice($rows, 1) as $n => $r) {
+            $line = $n + 2;
+            $get = function (string $c) use ($cols, $r) { return isset($cols[$c]) ? trim((string)($r[$cols[$c]] ?? '')) : ''; };
+            $name = mb_substr($get('nombre'), 0, 80);
+            if ($name === '' && implode('', $r) === '') continue; // fila vacía
+            if ($name === '') { $errors[] = "Fila $line: falta el nombre."; continue; }
+            $u = []; $bad = null;
+            foreach (['enlace', 'respaldo1', 'respaldo2'] as $c) {
+                $v = $get($c);
+                $u[$c] = $v === '' ? '' : clean_url($v);
+                if ($u[$c] === null) $bad = "el $c no es un enlace válido";
+            }
+            $yt = $get('youtube');
+            if ($yt !== '') {
+                $yt = clean_url($yt);
+                $host = $yt ? strtolower((string)parse_url($yt, PHP_URL_HOST)) : '';
+                if ($yt === null || !preg_match('~(^|\.)youtube\.com$~', $host)) $bad = 'el canal de YouTube no es válido';
+            } else $yt = null;
+            $img = [];
+            foreach (['logo', 'portada'] as $c) {
+                $v = $get($c);
+                $img[$c] = $v === '' ? null : clean_url($v);
+                if ($v !== '' && ($img[$c] === null || !starts_with($img[$c], 'https://'))) $bad = "el $c debe ser un enlace https://";
+            }
+            if ($bad) { $errors[] = "Fila $line ($name): $bad."; continue; }
+            if ($u['enlace'] === '' && $yt === null) { $errors[] = "Fila $line ($name): falta el enlace o el canal de YouTube."; continue; }
+            $cat = guess_category($get('categoria'));
+            $nat = preg_match('/^(si|sí|s|x|1|yes|true|verdadero)$/i', $get('nacional')) ? 1 : 0;
+            $key = mb_strtolower($name);
+            $pos = $get('orden') !== '' && is_numeric($get('orden')) ? (int)$get('orden') : null;
+            $vals = [$u['enlace'], $u['respaldo1'] ?: null, $u['respaldo2'] ?: null, $yt, $img['logo'], $img['portada'], $cat, $nat];
+            if (isset($existing[$key])) {
+                $upd->execute(array_merge($vals, [$pos ?? (int)$existing[$key]['position'], now(), (int)$existing[$key]['id']]));
+                $updated++;
+            } else {
+                $ins->execute(array_merge([$name], $vals, [$pos ?? ++$next, now(), now()]));
+                $existing[$key] = ['id' => (int)$pdo->lastInsertId(), 'position' => $pos ?? $next];
+                $added++;
+            }
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+    return [$added, $updated, $errors];
+}
+
+/** Envía un CSV que Excel abre bien (UTF-8 con BOM, separado por punto y coma). */
+function send_csv(string $filename, array $rows): void {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-store');
+    $out = fopen('php://output', 'w');
+    fwrite($out, "\xEF\xBB\xBF");
+    foreach ($rows as $r) fputcsv($out, $r, ';', '"', '\\');
+    fclose($out);
+    exit;
+}
