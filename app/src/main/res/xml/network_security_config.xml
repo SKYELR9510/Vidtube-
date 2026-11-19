@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Muchos canales IPTV transmiten por http:// (sin cifrar), así que se permiten esas conexiones
+  para reproducir. Lo sensible sigue yendo solo por https, por código:
+  actualizaciones (Updater.isTrustedUrl), panel de enlaces (PanelLinks.apiUrl) y TMDB.
+  Solo se confía en los certificados del sistema (no en los instalados por el usuario).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
