@@ -55,8 +55,9 @@ object PanelLinks {
 
     private val builtInUrl get() = runCatching { com.silva.vidtube.BuildConfig.PANEL_URL }.getOrDefault("")
     private val builtInKey get() = runCatching { com.silva.vidtube.BuildConfig.PANEL_KEY }.getOrDefault("")
-    private fun url() = _settings.value.first.ifBlank { builtInUrl }.trim()
-    private fun key() = _settings.value.second.ifBlank { builtInKey }.trim()
+    // Si la app trae el panel incluido, se usa siempre ese (lo configura el dueño desde GitHub)
+    private fun url() = (if (hasBuiltIn()) builtInUrl else _settings.value.first.ifBlank { builtInUrl }).trim()
+    private fun key() = (if (hasBuiltIn()) builtInKey else _settings.value.second.ifBlank { builtInKey }).trim()
 
     fun isConfigured() = url().isNotEmpty() && key().isNotEmpty()
     fun hasBuiltIn() = builtInUrl.isNotBlank() && builtInKey.isNotBlank()

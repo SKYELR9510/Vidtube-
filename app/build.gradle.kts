@@ -33,7 +33,10 @@ android {
         // Panel web de enlaces (secretos VIDTUBE_PANEL_URL y VIDTUBE_PANEL_KEY en GitHub).
         // Si faltan, se configura en la app: Configuración → Panel de enlaces.
         fun clean(v: String?) = (v ?: "").trim().replace("\"", "").replace("\\", "")
-        buildConfigField("String", "PANEL_URL", "\"${clean(System.getenv("VIDTUBE_PANEL_URL") ?: project.findProperty("panelUrl") as String?)}\"")
+        // Dirección del panel (no es secreta): la de tu hosting, salvo que se cambie con el secreto VIDTUBE_PANEL_URL
+        val panelUrl = clean(System.getenv("VIDTUBE_PANEL_URL") ?: project.findProperty("panelUrl") as String?)
+            .ifBlank { "https://vidtube.inversionesilva.com/" }
+        buildConfigField("String", "PANEL_URL", "\"$panelUrl\"")
         buildConfigField("String", "PANEL_KEY", "\"${clean(System.getenv("VIDTUBE_PANEL_KEY") ?: project.findProperty("panelKey") as String?)}\"")
     }
 

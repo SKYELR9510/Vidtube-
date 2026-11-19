@@ -88,19 +88,27 @@ fun SettingsScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
                 ) { v -> Library.updateSettings { it.copy(pictureInPicture = v) } }
             }
             Group("Películas") {
-                MenuRow(
-                    Icons.Outlined.Movie, "Clave de TMDB",
-                    when {
-                        tmdbUser.isNotBlank() -> "Usando tu clave · pósters, estrenos y fichas de películas"
-                        com.silva.vidtube.data.Tmdb.hasBuiltInToken() -> "Incluida en la app · puedes poner la tuya"
-                        else -> "Sin configurar · toca para pegar tu clave de themoviedb.org"
-                    },
-                ) { tmdbDialog = true }
-                MenuRow(
-                    Icons.Outlined.Movie, "Panel de enlaces",
-                    panelStatus ?: if (com.silva.vidtube.data.PanelLinks.isConfigured()) "Configurado" else
-                        "Sin configurar · conecta tu panel web para tener tus enlaces siempre",
-                ) { panelDialog = true }
+                // Si la app ya trae la clave de TMDB y el panel, no se muestra nada que configurar:
+                // quien recibe la app solo la usa.
+                if (!com.silva.vidtube.data.Tmdb.hasBuiltInToken()) {
+                    MenuRow(
+                        Icons.Outlined.Movie, "Clave de TMDB",
+                        if (tmdbUser.isNotBlank()) "Usando tu clave · pósters, estrenos y fichas de películas"
+                        else "Sin configurar · toca para pegar tu clave de themoviedb.org",
+                    ) { tmdbDialog = true }
+                }
+                if (com.silva.vidtube.data.PanelLinks.hasBuiltIn()) {
+                    MenuRow(
+                        Icons.Outlined.Movie, "Películas, series y canales",
+                        panelStatus ?: "Se actualizan solos al abrir la app", null,
+                    )
+                } else {
+                    MenuRow(
+                        Icons.Outlined.Movie, "Panel de enlaces",
+                        panelStatus ?: if (com.silva.vidtube.data.PanelLinks.isConfigured()) "Configurado" else
+                            "Sin configurar · conecta tu panel web para tener tus enlaces siempre",
+                    ) { panelDialog = true }
+                }
             }
             Group("Descargas") {
                 MenuRow(Icons.Outlined.Download, "Mis descargas", "Se guardan en Descargas/Vidtube", onDownloads)
