@@ -111,18 +111,23 @@ if (logged_in() && $_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 }
                 $logoRaw = trim((string)($_POST['logo'] ?? ''));
                 $logo = $logoRaw === '' ? null : clean_url($logoRaw);
+                $coverRaw = trim((string)($_POST['cover'] ?? ''));
+                $cover = $coverRaw === '' ? null : clean_url($coverRaw);
+                $cat = in_array($_POST['category'] ?? '', channel_categories(), true) ? (string)$_POST['category'] : 'General';
+                $national = !empty($_POST['national']) ? 1 : 0;
+                if ($coverRaw !== '' && ($cover === null || !starts_with($cover, 'https://'))) { flash('bad', 'La portada debe ser un enlace https:// a una imagen.'); break; }
                 $pos = (int)($_POST['position'] ?? 0);
                 if ($name === '') { flash('bad', 'Escribe el nombre del canal.'); break; }
                 if ($url === null) { flash('bad', 'El enlace de la señal debe empezar con https:// o http://'); break; }
                 if ($url === '' && $yt === null) { flash('bad', 'Pon el enlace de la señal o el canal oficial de YouTube.'); break; }
                 if ($logoRaw !== '' && ($logo === null || !starts_with($logo, 'https://'))) { flash('bad', 'El logo debe ser un enlace https:// a una imagen.'); break; }
                 if ($action === 'ch_add') {
-                    $pdo->prepare('INSERT INTO vt_channels (name, url, url2, url3, youtube, logo, position, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
-                        ->execute([$name, $url, $b['url2'], $b['url3'], $yt, $logo, $pos, now(), now()]);
+                    $pdo->prepare('INSERT INTO vt_channels (name, url, url2, url3, youtube, logo, category, national, cover, position, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+                        ->execute([$name, $url, $b['url2'], $b['url3'], $yt, $logo, $cat, $national, $cover, $pos, now(), now()]);
                     flash('ok', "Canal «{$name}» agregado.");
                 } else {
-                    $pdo->prepare('UPDATE vt_channels SET name = ?, url = ?, url2 = ?, url3 = ?, youtube = ?, logo = ?, position = ?, updated_at = ? WHERE id = ?')
-                        ->execute([$name, $url, $b['url2'], $b['url3'], $yt, $logo, $pos, now(), (int)$_POST['id']]);
+                    $pdo->prepare('UPDATE vt_channels SET name = ?, url = ?, url2 = ?, url3 = ?, youtube = ?, logo = ?, category = ?, national = ?, cover = ?, position = ?, updated_at = ? WHERE id = ?')
+                        ->execute([$name, $url, $b['url2'], $b['url3'], $yt, $logo, $cat, $national, $cover, $pos, now(), (int)$_POST['id']]);
                     flash('ok', 'Canal actualizado.');
                 }
                 $back = 'view=channels';
@@ -395,6 +400,9 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
         <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url3" placeholder="Respaldo 2 (opcional)">
         <input type="url" name="youtube" placeholder="Canal oficial de YouTube (opcional) https://www.youtube.com/@…">
         <input type="url" name="logo" placeholder="Logo https://… (opcional)">
+        <input type="url" name="cover" placeholder="Portada https://… (opcional, imagen ancha)">
+        <select name="category" aria-label="Categoría"><?php foreach (channel_categories() as $cat): ?><option><?= h($cat) ?></option><?php endforeach; ?></select>
+        <label class="chk"><input type="checkbox" name="national" value="1" checked> Nacional (Perú)</label>
         <input type="number" name="position" value="<?= count($data['channels']) + 1 ?>" aria-label="Orden" title="Orden">
         <button class="btn"><?= icon('plus') ?>Agregar canal</button>
       </form>
@@ -406,7 +414,7 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
       <p class="muted">Si el canal tiene su <b>canal oficial de YouTube</b> y está transmitiendo en vivo, la app usa YouTube. Si no, usa el enlace principal; si ese no funciona, pasa sola al respaldo 1 y luego al respaldo 2. En películas y series puedes agregar varios enlaces a un título: se prueban en orden.</p>
       <div class="channels"><?php foreach ($data['channels'] as $ch): ?>
         <div class="chcard">
-          <div class="logo"><?php if ($ch['logo']): ?><img src="<?= h($ch['logo']) ?>" alt=""><?php else: ?><span><?= h($ch['name']) ?></span><?php endif; ?><i>EN VIVO</i></div>
+          <div class="logo"<?php if (!empty($ch['cover'])): ?> style="background:center/cover url('<?= h($ch['cover']) ?>')"<?php endif; ?>><?php if ($ch['logo'] && empty($ch['cover'])): ?><img src="<?= h($ch['logo']) ?>" alt=""><?php elseif (empty($ch['cover'])): ?><span><?= h($ch['name']) ?></span><?php endif; ?><i><?= h($ch['category'] ?? 'General') ?><?= !empty($ch['national']) ? ' · Nacional' : '' ?></i></div>
           <?= form_open('ch_edit', $token, 'view=channels', 'chform') ?>
             <input type="hidden" name="id" value="<?= (int)$ch['id'] ?>">
             <input type="text" name="name" value="<?= h($ch['name']) ?>" aria-label="Nombre" required>
@@ -415,6 +423,11 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
             <input type="text" inputmode="url" autocomplete="off" spellcheck="false" name="url3" value="<?= h((string)($ch['url3'] ?? '')) ?>" placeholder="Respaldo 2 (opcional)" aria-label="Respaldo 2">
             <input type="url" name="youtube" value="<?= h((string)($ch['youtube'] ?? '')) ?>" placeholder="Canal oficial de YouTube (opcional)" aria-label="Canal de YouTube" title="Si transmite en vivo, la app usa YouTube">
             <input type="url" name="logo" value="<?= h((string)$ch['logo']) ?>" placeholder="Logo https://…" aria-label="Logo">
+            <input type="url" name="cover" value="<?= h((string)($ch['cover'] ?? '')) ?>" placeholder="Portada https://… (opcional)" aria-label="Portada">
+            <div class="row2">
+              <select name="category" aria-label="Categoría"><?php foreach (channel_categories() as $cat): ?><option<?= ($ch['category'] ?? 'General') === $cat ? ' selected' : '' ?>><?= h($cat) ?></option><?php endforeach; ?></select>
+              <label class="chk"><input type="checkbox" name="national" value="1"<?= !empty($ch['national']) ? ' checked' : '' ?>> Nacional</label>
+            </div>
             <div class="row2"><input type="number" name="position" value="<?= (int)$ch['position'] ?>" aria-label="Orden" title="Orden"><button class="btn ghost">Guardar</button></div>
           </form>
           <div class="row2">

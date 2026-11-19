@@ -920,7 +920,7 @@ fun MiniPlayer(state: NowPlaying.State) {
  * Color "ambiente" de un video: promedio de la miniatura (en pequeño), con el brillo y la
  * saturación ajustados para que se vea como una luz suave y no como una mancha.
  */
-private suspend fun ambientColorOf(context: Context, url: String?): Color? {
+internal suspend fun ambientColorOf(context: Context, url: String?): Color? {
     if (url.isNullOrBlank()) return null
     return runCatching {
         val request = coil.request.ImageRequest.Builder(context)

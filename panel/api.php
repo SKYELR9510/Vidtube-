@@ -32,9 +32,10 @@ foreach ($rows as $r) {
     if ($r['updated_at'] > $version) $version = $r['updated_at'];
 }
 $channels = [];
-foreach (db()->query('SELECT name, url, url2, url3, youtube, logo, updated_at FROM vt_channels ORDER BY position, name')->fetchAll() as $ch) {
+foreach (db()->query('SELECT name, url, url2, url3, youtube, logo, category, national, cover, updated_at FROM vt_channels ORDER BY position, name')->fetchAll() as $ch) {
     $backups = array_values(array_filter([$ch['url2'] ?? null, $ch['url3'] ?? null]));
-    $channels[] = ['name' => $ch['name'], 'url' => $ch['url'], 'backups' => $backups, 'youtube' => $ch['youtube'] ?? null, 'logo' => $ch['logo']];
+    $channels[] = ['name' => $ch['name'], 'url' => $ch['url'], 'backups' => $backups, 'youtube' => $ch['youtube'] ?? null, 'logo' => $ch['logo'],
+        'category' => $ch['category'] ?? 'General', 'national' => !empty($ch['national']), 'cover' => $ch['cover'] ?? null];
     if ($ch['updated_at'] > $version) $version = $ch['updated_at'];
 }
 echo json_encode(['version' => $version, 'count' => count($rows), 'titles' => array_values($titles), 'channels' => $channels],

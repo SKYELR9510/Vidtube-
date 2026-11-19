@@ -53,11 +53,21 @@ function db(): PDO {
              position INT NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL
            ) DEFAULT CHARSET=utf8mb4");
     // Respaldo de señal (paneles instalados antes no tienen estas columnas)
-    foreach (['url2', 'url3', 'youtube'] as $col) {
+    $extra = [
+        'url2' => 'TEXT NULL', 'url3' => 'TEXT NULL', 'youtube' => 'TEXT NULL',
+        // Diseño de TV abierta: categoría, si es canal nacional y portada
+        'category' => "VARCHAR(30) NOT NULL DEFAULT 'General'", 'national' => 'INT NOT NULL DEFAULT 0', 'cover' => 'TEXT NULL',
+    ];
+    foreach ($extra as $col => $type) {
         try { $pdo->query("SELECT $col FROM vt_channels LIMIT 1"); }
-        catch (PDOException $e) { $pdo->exec("ALTER TABLE vt_channels ADD COLUMN $col TEXT NULL"); }
+        catch (PDOException $e) { $pdo->exec("ALTER TABLE vt_channels ADD COLUMN $col $type"); }
     }
     return $pdo;
+}
+
+/** Categorías de los canales de TV (las mismas que muestra la app). */
+function channel_categories(): array {
+    return ['General', 'Noticias', 'Deportes', 'Música', 'Infantil', 'Películas', 'Entretenimiento'];
 }
 
 /** Igual que str_starts_with (para hostings con PHP 7.4). */

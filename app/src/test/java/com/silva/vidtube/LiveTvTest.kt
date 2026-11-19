@@ -37,4 +37,20 @@ class LiveTvTest {
         assertEquals("", list[0].url)
         assertEquals("https://www.youtube.com/@WillaxTV", list[0].youtube)
     }
+
+    @Test
+    fun canalConCategoriaNacionalYPortada() {
+        val o = JSONObject("""{"channels":[
+            {"name":"TV Perú","url":"https://a.pe/1.m3u8","backups":[],"category":"Noticias","national":true,"cover":"https://img.pe/tvp.jpg","logo":null},
+            {"name":"Viejo","url":"https://a.pe/2.m3u8","logo":null}]}""")
+        val list = PanelLinks.parseChannels(o)
+        assertEquals("Noticias", list[0].category)
+        assertEquals(true, list[0].national)
+        assertEquals("https://img.pe/tvp.jpg", list[0].cover)
+        // Paneles anteriores (sin estos datos): General, no nacional, sin portada
+        assertEquals("General", list[1].category)
+        assertEquals(false, list[1].national)
+        assertEquals(null, list[1].cover)
+        assertEquals("tv perú", list[0].key)
+    }
 }

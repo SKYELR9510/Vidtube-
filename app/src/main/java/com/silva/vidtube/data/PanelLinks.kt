@@ -32,7 +32,16 @@ data class PanelChannel(
     val backups: List<String> = emptyList(),
     /** Canal oficial de YouTube: si está en vivo, se usa esa transmisión. */
     val youtube: String? = null,
-)
+    /** Categoría (General, Noticias, Deportes, Música…). */
+    val category: String = "General",
+    /** Canal nacional (Perú): filtro «Nacionales». */
+    val national: Boolean = false,
+    /** Imagen ancha de portada (opcional). */
+    val cover: String? = null,
+) {
+    /** Identificador estable para favoritos. */
+    val key: String get() = name.trim().lowercase()
+}
 
 /**
  * Enlaces del panel web (PHP en tu hosting). La app solo los lee con la clave;
@@ -134,7 +143,12 @@ object PanelLinks {
             }.mapNotNull { UserLinks.normalize(it) }.distinct()
             val yt = UserLinks.normalize(c.optString("youtube"))?.takeIf { UserLinks.isYoutube(it) }
             if (all.isEmpty() && yt == null) return@mapNotNull null
-            PanelChannel(name, all.firstOrNull() ?: "", c.optString("logo").takeIf { it.startsWith("https://") }, all.drop(1), yt)
+            PanelChannel(
+                name, all.firstOrNull() ?: "", c.optString("logo").takeIf { it.startsWith("https://") }, all.drop(1), yt,
+                category = c.optString("category").ifBlank { "General" }.take(30),
+                national = c.optBoolean("national", false),
+                cover = c.optString("cover").takeIf { it.startsWith("https://") },
+            )
         }
     }
 

@@ -168,7 +168,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                             launchSingleTop = true
                             restoreState = true
                         }
-                    }, onMovie = openTitle, onWeb = openWeb)
+                    }, onMovie = openTitle, onWeb = openWeb, onTv = { nav.navigate("tv") { launchSingleTop = true } })
                 }
                 composable("more/{id}/{title}") { entry ->
                     MoreScreen(

@@ -233,6 +233,7 @@ fun HomeScreen(
     onLibrary: () -> Unit = {},
     onMovie: (Long, Boolean) -> Unit = { _, _ -> },
     onWeb: (String, String) -> Unit = { _, _ -> },
+    onTv: () -> Unit = {},
     vm: HomeViewModel = viewModel(),
     moviesVm: MoviesViewModel = viewModel(),
 ) {
@@ -266,7 +267,10 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         ) {
             items(vm.chips, key = { it.id }) { chip ->
-                CategoryChip(chip.label, chip.icon, chip.id == vm.selected) { vm.selected = chip.id }
+                CategoryChip(chip.label, chip.icon, chip.id == vm.selected) {
+                    // TV abierta se abre en su propia pantalla
+                    if (chip.id == "tvabierta") onTv() else vm.selected = chip.id
+                }
             }
             item("more_cats") { CategoryChip("Más categorías", Icons.Outlined.Explore, false, onSearch) }
         }
