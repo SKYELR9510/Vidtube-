@@ -170,6 +170,8 @@ object PlayerHolder {
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(20_000)
+        // Señales de TV: mismas cabeceras (Referer, Origin, cookies) con que las pide su página oficial
+        StreamSniffer.pendingHeaders[url]?.let { http.setDefaultRequestProperties(it) }
         val item = MediaItem.fromUri(Uri.parse(url))
         val path = Uri.parse(url).path.orEmpty().lowercase()
         val source = when {

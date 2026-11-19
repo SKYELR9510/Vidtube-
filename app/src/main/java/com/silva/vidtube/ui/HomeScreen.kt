@@ -302,7 +302,7 @@ fun HomeScreen(
         }
         // TV abierta: canales en vivo en vez de la lista de videos
         if (vm.selected == "tvabierta") {
-            TvContent(onVideo, onWeb)
+            TvContent(onVideo)
             return@Column
         }
         PullToRefreshBox(

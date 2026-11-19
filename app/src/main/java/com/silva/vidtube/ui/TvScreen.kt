@@ -96,8 +96,38 @@ class TvViewModel : ViewModel() {
 /** Canales de TV de señal abierta (YouTube oficial) y los del panel. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun TvContent(onVideo: (VideoItem) -> Unit, onWeb: (String, String) -> Unit, vm: TvViewModel = viewModel()) {
+fun TvContent(onVideo: (VideoItem) -> Unit, vm: TvViewModel = viewModel()) {
     LaunchedEffect(Unit) { vm.load() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = androidx.compose.runtime.remember(context) { context.findActivity() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var resolving by androidx.compose.runtime.remember { mutableStateOf<String?>(null) }
+    // Señal oficial: se detecta en segundo plano y se reproduce en el reproductor de Vidtube
+    fun resolve(ch: TvChannel, page: String) {
+        if (resolving != null) return
+        resolving = ch.id
+        scope.launch {
+            val found = activity?.let { com.silva.vidtube.player.StreamSniffer.find(it, page) }
+            resolving = null
+            val yt = (vm.states[ch.id] as? LiveState.OnAir)?.video
+            when {
+                found != null -> {
+                    com.silva.vidtube.player.StreamSniffer.pendingHeaders[found.url] = found.headers
+                    onVideo(
+                        VideoItem(
+                            url = found.url, title = ch.name + " en vivo", thumbnail = null, channelName = ch.name,
+                            channelUrl = null, channelAvatar = null, durationSec = 0, views = -1, uploaded = null, isLive = true,
+                        )
+                    )
+                }
+                yt != null -> onVideo(yt)
+                else -> android.widget.Toast.makeText(
+                    context, "No se pudo abrir la señal de ${ch.name} en el reproductor. Intenta de nuevo en un momento.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
     val panel by PanelLinks.channels.collectAsState()
     PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.load(force = true) }, modifier = Modifier.fillMaxSize()) {
         LazyVerticalGrid(
@@ -109,8 +139,8 @@ fun TvContent(onVideo: (VideoItem) -> Unit, onWeb: (String, String) -> Unit, vm:
         ) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "intro") {
                 Text(
-                    "Señal abierta de Perú: los canales con «EN VIVO 24 H» abren su señal oficial dentro de Vidtube; " +
-                        "los demás, su transmisión oficial de YouTube o su web. Desliza hacia abajo para actualizar.",
+                    "Señal abierta de Perú en el reproductor de Vidtube: «EN VIVO 24 H» usa la señal oficial del canal; " +
+                        "los demás, su transmisión oficial de YouTube. Desliza hacia abajo para actualizar.",
                     color = VColors.Secondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
@@ -120,7 +150,7 @@ fun TvContent(onVideo: (VideoItem) -> Unit, onWeb: (String, String) -> Unit, vm:
                 item(span = { GridItemSpan(maxLineSpan) }, key = "yt_t") { Header("Canales de señal abierta") }
             }
             items(LiveTv.peru, key = { it.id }) { ch ->
-                ChannelCard(ch, vm.states[ch.id] ?: LiveState.Searching, onPlay = onVideo, onWeb = onWeb)
+                ChannelCard(ch, vm.states[ch.id] ?: LiveState.Searching, resolving == ch.id, onPlay = onVideo) { page -> resolve(ch, page) }
             }
         }
     }
@@ -128,10 +158,10 @@ fun TvContent(onVideo: (VideoItem) -> Unit, onWeb: (String, String) -> Unit, vm:
 
 /** Pantalla propia (desde Explorar). */
 @Composable
-fun TvScreen(onBack: () -> Unit, onVideo: (VideoItem) -> Unit, onWeb: (String, String) -> Unit) {
+fun TvScreen(onBack: () -> Unit, onVideo: (VideoItem) -> Unit) {
     androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(VColors.Background)) {
         VTopBar(title = "TV abierta", onBack = onBack)
-        TvContent(onVideo, onWeb)
+        TvContent(onVideo)
     }
 }
 
@@ -152,13 +182,19 @@ private fun liveItem(c: PanelChannel) = VideoItem(
  *  - Sin página 24 h: se ve su transmisión de YouTube; si no hay, se ofrece abrir su web oficial.
  */
 @Composable
-private fun ChannelCard(ch: TvChannel, state: LiveState, onPlay: (VideoItem) -> Unit, onWeb: (String, String) -> Unit) {
+private fun ChannelCard(
+    ch: TvChannel,
+    state: LiveState,
+    connecting: Boolean,
+    onPlay: (VideoItem) -> Unit,
+    onResolve: (String) -> Unit,
+) {
     val onAir = state as? LiveState.OnAir
     val web = ch.liveUrl ?: ch.siteUrl
     val main: (() -> Unit)? = when {
-        ch.liveUrl != null -> ({ onWeb(ch.liveUrl, ch.name + " en vivo") })
+        ch.liveUrl != null -> ({ onResolve(ch.liveUrl) })
         onAir != null -> ({ onPlay(onAir.video) })
-        ch.siteUrl != null -> ({ onWeb(ch.siteUrl, ch.name) })
+        ch.siteUrl != null -> ({ onResolve(ch.siteUrl) })
         else -> null
     }
     Column(
@@ -178,6 +214,11 @@ private fun ChannelCard(ch: TvChannel, state: LiveState, onPlay: (VideoItem) -> 
                 )
             } else {
                 Text(ch.name, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            if (connecting) {
+                Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
+                }
             }
             when {
                 ch.liveUrl != null -> LiveBadge(Modifier.align(Alignment.TopStart).padding(6.dp), "EN VIVO 24 H")
@@ -201,10 +242,11 @@ private fun ChannelCard(ch: TvChannel, state: LiveState, onPlay: (VideoItem) -> 
         Text(ch.name, color = VColors.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp, start = 2.dp))
         Text(
             when {
-                ch.liveUrl != null -> "Señal oficial en su web"
+                connecting -> "Conectando con la señal…"
+                ch.liveUrl != null -> "Señal oficial · en el reproductor de Vidtube"
                 onAir != null -> onAir.video.title
                 state == LiveState.Searching -> "Buscando señal…"
-                ch.siteUrl != null -> "No está en YouTube ahora · abrir su web"
+                ch.siteUrl != null -> "No está en YouTube ahora · probar su señal"
                 else -> "Sin transmisión ahora"
             },
             color = VColors.Secondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,

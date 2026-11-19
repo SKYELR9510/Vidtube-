@@ -625,7 +625,7 @@ private fun MyLinks(
                         (if (l.fromPanel) "Del panel · " else "") + when (l.kind) {
                             com.silva.vidtube.data.UserLink.Kind.YOUTUBE -> "YouTube · se ve en Vidtube"
                             com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · en el reproductor de Vidtube"
-                            else -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · página, se abre dentro de Vidtube"
+                            else -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · página: se busca su video y se ve en Vidtube"
                         },
                         color = VColors.Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
@@ -662,7 +662,7 @@ private fun AddLinkDialog(onDismiss: () -> Unit, onSave: (url: String, name: Str
             Column {
                 Text(
                     "Pega un enlace de YouTube, Google Drive, Dropbox, un archivo de video (.mp4, .m3u8…) " +
-                        "o una página con reproductor. Todo se ve dentro de Vidtube. Se guarda solo en este celular.",
+                        "o una página con reproductor (Vidtube busca su video y lo reproduce aquí). Se guarda solo en este celular.",
                     color = VColors.Secondary, fontSize = 13.sp,
                 )
                 Spacer(Modifier.height(10.dp))

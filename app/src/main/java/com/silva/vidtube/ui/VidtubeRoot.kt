@@ -1,5 +1,6 @@
 package com.silva.vidtube.ui
 
+import kotlinx.coroutines.launch
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
@@ -97,10 +98,30 @@ fun VidtubeRoot(isInPip: Boolean) {
     val openSearch: () -> Unit = { nav.navigate("search") { launchSingleTop = true } }
     val openSettings: () -> Unit = { nav.navigate("settings") { launchSingleTop = true } }
     // Ficha de TMDB: película o serie
+    // Enlaces a páginas: se busca el video de la página en segundo plano y se reproduce
+    // en el reproductor de Vidtube (la página nunca se muestra)
+    val rootScope = androidx.compose.runtime.rememberCoroutineScope()
     val openWeb: (String, String) -> Unit = { url, title ->
-        // Antes de abrir la página se detiene lo que suene en el reproductor de Vidtube
-        com.silva.vidtube.player.PlayerHolder.playerOrNull?.pause()
-        nav.navigate("web/" + Uri.encode(url) + "/" + Uri.encode(title.ifBlank { "Enlace" }))
+        val act = context.findActivity()
+        android.widget.Toast.makeText(context, "Buscando el video…", android.widget.Toast.LENGTH_SHORT).show()
+        rootScope.launch {
+            val found = act?.let { com.silva.vidtube.player.StreamSniffer.find(it, url) }
+            if (found != null) {
+                com.silva.vidtube.player.StreamSniffer.pendingHeaders[found.url] = found.headers
+                NowPlaying.open(
+                    context,
+                    VideoItem(
+                        url = found.url, title = title.ifBlank { "Enlace" }, thumbnail = null,
+                        channelName = com.silva.vidtube.data.UserLinks.hostOf(url), channelUrl = null, channelAvatar = null,
+                        durationSec = 0, views = -1, uploaded = null, isLive = false,
+                    ),
+                )
+            } else {
+                android.widget.Toast.makeText(
+                    context, "No se encontró un video que Vidtube pueda reproducir en esa página.", android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
     }
     val openTitle: (Long, Boolean) -> Unit = { id, tv -> nav.navigate((if (tv) "tv/" else "movie/") + id) }
 
@@ -203,7 +224,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                         onWeb = openWeb,
                     )
                 }
-                composable("tv") { TvScreen(onBack = { nav.popBackStack() }, onVideo = openVideo, onWeb = openWeb) }
+                composable("tv") { TvScreen(onBack = { nav.popBackStack() }, onVideo = openVideo) }
                 composable("web/{url}/{title}") { entry ->
                     WebPlayerScreen(
                         url = Uri.decode(entry.arguments?.getString("url") ?: ""),
