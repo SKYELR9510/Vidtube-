@@ -5,7 +5,7 @@ name: Compilar y publicar Vidtube
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", "pc/**", "tv/**", ".github/workflows/pc.yml", ".github/workflows/tv.yml"]
+    paths-ignore: ["**.md", "panel/**", "pc/**", "tv/**", ".github/workflows/pc.yml", ".github/workflows/tv.yml"]
   workflow_dispatch:
   workflow_call:
 

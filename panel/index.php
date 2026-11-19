@@ -2,278 +2,417 @@
 declare(strict_types=1);
 require __DIR__ . '/lib.php';
 
-// Panel de enlaces de Vidtube: agregar, editar y borrar enlaces de películas y series.
+// Panel de Vidtube: películas, series y canales de TV con sus enlaces.
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');
-header("Content-Security-Policy: default-src 'self'; img-src 'self' https://image.tmdb.org data:; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+header("Content-Security-Policy: default-src 'self'; img-src 'self' https://image.tmdb.org https: data:; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
 
 start_session();
 $c = cfg();
 $msg = null;
 $err = null;
-$action = $_POST['action'] ?? $_GET['action'] ?? '';
+$action = (string)($_POST['action'] ?? '');
+$view = (string)($_GET['view'] ?? 'home');
+$IMG = 'https://image.tmdb.org/t/p/';
 
-// ---------- Generar hash de contraseña (sin iniciar sesión) ----------
+function flash(string $type, string $text): void { $_SESSION['vt_flash'] = [$type, $text]; }
+function go(string $qs): void { header('Location: ./' . ($qs !== '' ? '?' . $qs : '')); exit; }
+
+// ---------- Sin sesión: generar hash e iniciar sesión ----------
 if ($action === 'hash' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     check_csrf();
     $p = (string)($_POST['password'] ?? '');
     if (strlen($p) < 10) $err = 'Usa una contraseña de al menos 10 caracteres.';
     else $generated = password_hash($p, PASSWORD_DEFAULT);
 }
-
-// ---------- Iniciar / cerrar sesión ----------
 if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     check_csrf();
     if (login_locked()) $err = 'Demasiados intentos. Espera 10 minutos.';
     elseif (!try_login((string)($_POST['user'] ?? ''), (string)($_POST['password'] ?? ''))) $err = 'Usuario o contraseña incorrectos.';
-    else { header('Location: ./'); exit; }
+    else go('');
 }
 if ($action === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     check_csrf();
     $_SESSION = [];
     session_destroy();
-    header('Location: ./');
-    exit;
+    go('');
 }
 
-// ---------- Acciones del panel (solo con sesión) ----------
-// ---------- Canales de TV ----------
-if (logged_in() && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, ['ch_add', 'ch_edit', 'ch_delete'], true)) {
+// ---------- Acciones con sesión (todas por POST + CSRF; después se redirige) ----------
+if (logged_in() && $_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
     check_csrf();
-    $pdo = db();
-    if ($action === 'ch_delete') {
-        $pdo->prepare('DELETE FROM vt_channels WHERE id = ?')->execute([(int)($_POST['id'] ?? 0)]);
-        $msg = 'Canal borrado.';
-    } else {
-        $name = trim(mb_substr((string)($_POST['name'] ?? ''), 0, 80));
-        $url = clean_url((string)($_POST['url'] ?? ''));
-        $logoRaw = trim((string)($_POST['logo'] ?? ''));
-        $logo = $logoRaw === '' ? null : clean_url($logoRaw);
-        $pos = (int)($_POST['position'] ?? 0);
-        if ($name === '') $err = 'Escribe el nombre del canal.';
-        elseif ($url === null) $err = 'El enlace de la señal debe empezar con https:// o http://';
-        elseif ($logoRaw !== '' && ($logo === null || !str_starts_with($logo, 'https://'))) $err = 'El logo debe ser un enlace https:// a una imagen.';
-        elseif ($action === 'ch_add') {
-            $pdo->prepare('INSERT INTO vt_channels (name, url, logo, position, created_at, updated_at) VALUES (?,?,?,?,?,?)')
-                ->execute([$name, $url, $logo, $pos, now(), now()]);
-            $msg = "Canal «{$name}» agregado.";
-        } else {
-            $pdo->prepare('UPDATE vt_channels SET name = ?, url = ?, logo = ?, position = ?, updated_at = ? WHERE id = ?')
-                ->execute([$name, $url, $logo, $pos, now(), (int)($_POST['id'] ?? 0)]);
-            $msg = 'Canal actualizado.';
-        }
-    }
-}
-
-if (logged_in() && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, ['add', 'edit', 'delete'], true)) {
-    check_csrf();
-    $pdo = db();
-    if ($action === 'delete') {
-        $pdo->prepare('DELETE FROM vt_links WHERE id = ?')->execute([(int)($_POST['id'] ?? 0)]);
-        $msg = 'Enlace borrado.';
-    } else {
-        $url = clean_url((string)($_POST['url'] ?? ''));
-        $name = trim(mb_substr((string)($_POST['name'] ?? ''), 0, 80));
-        if ($url === null) $err = 'El enlace debe empezar con https:// o http://';
-        elseif ($action === 'add') {
-            $kind = ($_POST['kind'] ?? '') === 'tv' ? 'tv' : 'movie';
-            $id = (int)($_POST['tmdb_id'] ?? 0);
-            $title = trim(mb_substr((string)($_POST['title'] ?? ''), 0, 255));
-            $year = ($_POST['year'] ?? '') !== '' ? (int)$_POST['year'] : null;
-            $poster = preg_match('~^/[A-Za-z0-9_./-]+$~', (string)($_POST['poster'] ?? '')) ? $_POST['poster'] : null;
-            if ($id <= 0 || $title === '') $err = 'Elige primero una película o serie.';
-            else {
+    $back = (string)($_POST['back'] ?? '');
+    if (!preg_match('~^[a-z0-9_=&%.-]*$~i', $back)) $back = '';
+    try {
+        $pdo = db();
+        switch ($action) {
+            case 'add':
+                $url = clean_url((string)($_POST['url'] ?? ''));
+                $kind = ($_POST['kind'] ?? '') === 'tv' ? 'tv' : 'movie';
+                $id = (int)($_POST['tmdb_id'] ?? 0);
+                $title = trim(mb_substr((string)($_POST['title'] ?? ''), 0, 255));
+                $year = ($_POST['year'] ?? '') !== '' ? (int)$_POST['year'] : null;
+                $poster = preg_match('~^/[A-Za-z0-9_./-]+$~', (string)($_POST['poster'] ?? '')) ? (string)$_POST['poster'] : null;
+                $name = trim(mb_substr((string)($_POST['name'] ?? ''), 0, 80));
+                if ($url === null) { flash('bad', 'El enlace debe empezar con https:// o http://'); break; }
+                if ($id <= 0 || $title === '') { flash('bad', 'Elige primero una película o serie.'); break; }
                 if ($name === '') $name = parse_url($url, PHP_URL_HOST) ?: 'Enlace';
                 $pdo->prepare('INSERT INTO vt_links (kind, tmdb_id, title, year, poster, name, url, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
                     ->execute([$kind, $id, $title, $year, $poster, $name, $url, now(), now()]);
-                $msg = "Enlace agregado a «{$title}».";
-            }
-        } else {
-            if ($name === '') $name = parse_url($url, PHP_URL_HOST) ?: 'Enlace';
-            $pdo->prepare('UPDATE vt_links SET name = ?, url = ?, updated_at = ? WHERE id = ?')
-                ->execute([$name, $url, now(), (int)($_POST['id'] ?? 0)]);
-            $msg = 'Enlace actualizado.';
+                flash('ok', "Enlace agregado a «{$title}».");
+                $back = "view=title&kind=$kind&id=$id";
+                break;
+            case 'edit':
+                $url = clean_url((string)($_POST['url'] ?? ''));
+                $name = trim(mb_substr((string)($_POST['name'] ?? ''), 0, 80));
+                if ($url === null) { flash('bad', 'El enlace debe empezar con https:// o http://'); break; }
+                if ($name === '') $name = parse_url($url, PHP_URL_HOST) ?: 'Enlace';
+                $pdo->prepare('UPDATE vt_links SET name = ?, url = ?, updated_at = ? WHERE id = ?')->execute([$name, $url, now(), (int)$_POST['id']]);
+                flash('ok', 'Enlace actualizado.');
+                break;
+            case 'delete':
+                $pdo->prepare('DELETE FROM vt_links WHERE id = ?')->execute([(int)$_POST['id']]);
+                flash('ok', 'Enlace borrado.');
+                break;
+            case 'delete_title':
+                $pdo->prepare('DELETE FROM vt_links WHERE kind = ? AND tmdb_id = ?')
+                    ->execute([($_POST['kind'] ?? '') === 'tv' ? 'tv' : 'movie', (int)$_POST['tmdb_id']]);
+                flash('ok', 'Título y sus enlaces borrados.');
+                $back = ($_POST['kind'] ?? '') === 'tv' ? 'view=series' : 'view=movies';
+                break;
+            case 'check':
+                $st = $pdo->prepare('SELECT url FROM vt_links WHERE id = ?');
+                $st->execute([(int)$_POST['id']]);
+                $u = $st->fetchColumn();
+                if ($u) { [$ok, $t] = check_url((string)$u); flash($ok ? 'ok' : 'bad', 'Verificación: ' . $t); }
+                break;
+            case 'ch_add':
+            case 'ch_edit':
+                $name = trim(mb_substr((string)($_POST['name'] ?? ''), 0, 80));
+                $url = clean_url((string)($_POST['url'] ?? ''));
+                $logoRaw = trim((string)($_POST['logo'] ?? ''));
+                $logo = $logoRaw === '' ? null : clean_url($logoRaw);
+                $pos = (int)($_POST['position'] ?? 0);
+                if ($name === '') { flash('bad', 'Escribe el nombre del canal.'); break; }
+                if ($url === null) { flash('bad', 'El enlace de la señal debe empezar con https:// o http://'); break; }
+                if ($logoRaw !== '' && ($logo === null || !starts_with($logo, 'https://'))) { flash('bad', 'El logo debe ser un enlace https:// a una imagen.'); break; }
+                if ($action === 'ch_add') {
+                    $pdo->prepare('INSERT INTO vt_channels (name, url, logo, position, created_at, updated_at) VALUES (?,?,?,?,?,?)')
+                        ->execute([$name, $url, $logo, $pos, now(), now()]);
+                    flash('ok', "Canal «{$name}» agregado.");
+                } else {
+                    $pdo->prepare('UPDATE vt_channels SET name = ?, url = ?, logo = ?, position = ?, updated_at = ? WHERE id = ?')
+                        ->execute([$name, $url, $logo, $pos, now(), (int)$_POST['id']]);
+                    flash('ok', 'Canal actualizado.');
+                }
+                $back = 'view=channels';
+                break;
+            case 'ch_delete':
+                $pdo->prepare('DELETE FROM vt_channels WHERE id = ?')->execute([(int)$_POST['id']]);
+                flash('ok', 'Canal borrado.');
+                $back = 'view=channels';
+                break;
+            case 'ch_check':
+                $st = $pdo->prepare('SELECT url FROM vt_channels WHERE id = ?');
+                $st->execute([(int)$_POST['id']]);
+                $u = $st->fetchColumn();
+                if ($u) { [$ok, $t] = check_url((string)$u); flash($ok ? 'ok' : 'bad', 'Señal: ' . $t); }
+                $back = 'view=channels';
+                break;
         }
+    } catch (Throwable $e) {
+        flash('bad', $e->getMessage());
     }
+    go($back);
 }
 
+if (!empty($_SESSION['vt_flash'])) {
+    [$t, $text] = $_SESSION['vt_flash'];
+    unset($_SESSION['vt_flash']);
+    if ($t === 'ok') $msg = $text; else $err = $text;
+}
+$token = csrf_token();
+
+/** Formulario POST con CSRF y página de regreso. */
+function form_open(string $action, string $token, string $back = '', string $class = ''): string {
+    return '<form method="post"' . ($class ? ' class="' . h($class) . '"' : '') . '>'
+        . '<input type="hidden" name="csrf" value="' . h($token) . '">'
+        . '<input type="hidden" name="action" value="' . h($action) . '">'
+        . '<input type="hidden" name="back" value="' . h($back) . '">';
+}
+function img(?string $path, string $size): ?string {
+    global $IMG;
+    return $path ? $IMG . $size . $path : null;
+}
+function icon(string $n): string {
+    $p = [
+        'home' => '<path d="M4 10.5 12 4l8 6.5V20h-5v-6H9v6H4z"/>',
+        'movie' => '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M8 5v4M16 5v4"/>',
+        'tv' => '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="m9 2 3 4 3-4"/>',
+        'live' => '<circle cx="12" cy="12" r="2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 16.2a6 6 0 0 0 0-8.4M5 5a10 10 0 0 0 0 14M19 19a10 10 0 0 0 0-14"/>',
+        'check' => '<path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/><path d="m8 12 3 3 5-6"/>',
+        'plus' => '<path d="M12 5v14M5 12h14"/>',
+        'search' => '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+        'link' => '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
+        'logout' => '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/>',
+    ][$n] ?? '';
+    return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $p . '</svg>';
+}
+
+// ---------- Datos para la vista ----------
+$fatal = null;
+$data = [];
+if (logged_in()) {
+    try {
+        $pdo = db();
+        $all = $pdo->query('SELECT * FROM vt_links ORDER BY updated_at DESC, id DESC')->fetchAll();
+        $titles = [];
+        foreach ($all as $l) {
+            $k = $l['kind'] . ':' . $l['tmdb_id'];
+            if (!isset($titles[$k])) $titles[$k] = $l + ['links' => []];
+            $titles[$k]['links'][] = $l;
+        }
+        $data['titles'] = $titles;
+        $data['links'] = count($all);
+        $data['movies'] = array_filter($titles, function ($t) { return $t['kind'] === 'movie'; });
+        $data['series'] = array_filter($titles, function ($t) { return $t['kind'] === 'tv'; });
+        $data['channels'] = $pdo->query('SELECT * FROM vt_channels ORDER BY position, name')->fetchAll();
+    } catch (Throwable $e) {
+        $fatal = $e->getMessage();
+    }
+}
 $q = trim((string)($_GET['q'] ?? ''));
 $filter = trim((string)($_GET['f'] ?? ''));
-$results = (logged_in() && $q !== '') ? tmdb_search($q) : [];
-$img = 'https://image.tmdb.org/t/p/w154';
-$token = csrf_token();
+$tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
 ?><!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Panel de enlaces · Vidtube</title>
-<style>
-:root{--bg:#0B0C10;--card:#15171D;--raise:#1C1F27;--line:#262A33;--text:#F3F4F7;--muted:#9AA0AC;--coral:#FF405B;--ok:#3DBE8B}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{max-width:900px;margin:0 auto;padding:20px 16px 60px}
-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
-h1{font-size:22px;margin:0}h1 b{color:var(--coral)}h2{font-size:17px;margin:26px 0 10px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
-input,button{font:inherit}input[type=text],input[type=password],input[type=url],input[type=search]{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--raise);color:var(--text)}
-button,.btn{cursor:pointer;border:0;border-radius:10px;padding:10px 16px;background:var(--coral);color:#fff;font-weight:600;text-decoration:none;display:inline-block}
-button.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}button.danger{background:transparent;border:1px solid #5a2630;color:#ff8a9a}
-.row{display:flex;gap:10px;align-items:center}.row>*{flex:1}.row>button{flex:none}
-.msg{padding:10px 12px;border-radius:10px;margin-bottom:12px}.ok{background:#173a2d;color:#9be7c4}.bad{background:#3a1720;color:#ffb3bf}
-.results{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
-.res{background:var(--raise);border:1px solid var(--line);border-radius:12px;overflow:hidden}.res img{width:100%;aspect-ratio:2/3;object-fit:cover;display:block;background:#222}
-.res .b{padding:8px}.res form{display:flex;flex-direction:column;gap:6px;margin-top:6px}.res input{padding:8px;font-size:13px}.res button{padding:8px;font-size:13px}
-.title{display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line)}.title img{width:56px;border-radius:8px;flex:none}
-.link{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;margin:8px 0;padding-bottom:8px;border-bottom:1px dashed var(--line)}
-.link form.edit{display:grid;grid-template-columns:1fr;gap:6px;flex:1 1 260px}.link input{padding:8px 10px;font-size:13px}
-.link button{padding:8px 12px;font-size:13px}
-@media (min-width:640px){.link form.edit{grid-template-columns:170px 1fr auto}}
-form.chan{display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:10px}form.chan input{padding:9px 10px;font-size:14px;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--raise);color:var(--text)}
-@media (min-width:640px){form.chan{grid-template-columns:150px 1fr 1fr 80px auto}.link form.chan.edit{grid-template-columns:150px 1fr 1fr 80px auto}}
-small,.muted{color:var(--muted)}code{background:var(--raise);padding:2px 6px;border-radius:6px;word-break:break-all}
-.tag{font-size:11px;padding:2px 7px;border-radius:20px;border:1px solid var(--line);color:var(--muted);margin-left:6px}
-</style>
+<title>Panel · Vidtube</title>
+<link rel="stylesheet" href="panel.css">
 </head>
 <body>
-<main>
 <?php if (!logged_in()): ?>
-  <header><h1>Vid<b>tube</b> · Panel de enlaces</h1></header>
+<main class="login">
+  <div class="brand big">Vid<b>tube</b><span>Panel de enlaces</span></div>
   <?php if ($err): ?><div class="msg bad"><?= h($err) ?></div><?php endif; ?>
   <?php if (($c['admin_password_hash'] ?? '') === ''): ?>
     <div class="card">
-      <p><b>Primer paso:</b> crea tu contraseña. Escríbela aquí, toca «Generar hash» y copia el resultado en
-        <code>config.php</code> → <code>admin_password_hash</code>. Después recarga esta página.</p>
-      <form method="post" class="row">
-        <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="hash">
+      <h3>Primer paso: crea tu contraseña</h3>
+      <p class="muted">Escríbela, toca «Generar hash» y copia el resultado en <code>config.php</code> → <code>admin_password_hash</code>. Luego recarga esta página.</p>
+      <?= form_open('hash', $token) ?>
         <input type="password" name="password" placeholder="Contraseña nueva (mínimo 10 caracteres)" autocomplete="new-password" required>
-        <button>Generar hash</button>
+        <button class="btn">Generar hash</button>
       </form>
-      <?php if (!empty($generated)): ?><p>Copia esto en config.php:<br><code><?= h($generated) ?></code></p><?php endif; ?>
+      <?php if (!empty($generated)): ?><p>Copia esto en config.php:</p><code class="block"><?= h($generated) ?></code><?php endif; ?>
     </div>
   <?php else: ?>
-    <form method="post" class="card" style="max-width:380px">
-      <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="login">
-      <p><input type="text" name="user" placeholder="Usuario" autocomplete="username" required></p>
-      <p><input type="password" name="password" placeholder="Contraseña" autocomplete="current-password" required></p>
-      <button style="width:100%">Entrar</button>
+    <?= form_open('login', $token, '', 'card') ?>
+      <label>Usuario<input type="text" name="user" autocomplete="username" required></label>
+      <label>Contraseña<input type="password" name="password" autocomplete="current-password" required></label>
+      <button class="btn wide">Entrar</button>
     </form>
   <?php endif; ?>
+</main>
 <?php else: ?>
-  <header>
-    <h1>Vid<b>tube</b> · Panel de enlaces</h1>
-    <form method="post"><input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="logout"><button class="ghost">Salir</button></form>
-  </header>
-  <?php if ($msg): ?><div class="msg ok"><?= h($msg) ?></div><?php endif; ?>
-  <?php if ($err): ?><div class="msg bad"><?= h($err) ?></div><?php endif; ?>
+<div class="app">
+  <aside class="side">
+    <div class="brand">Vid<b>tube</b><span>Panel</span></div>
+    <nav>
+      <?php foreach ([
+          ['home', 'home', 'Resumen'], ['movies', 'movie', 'Películas'], ['series', 'tv', 'Series'],
+          ['channels', 'live', 'Canales de TV'], ['add', 'plus', 'Agregar'], ['diag', 'check', 'Diagnóstico'],
+      ] as [$v, $ic, $label]): ?>
+        <a href="?view=<?= $v ?>" class="<?= ($view === $v || ($view === 'title' && $v === ((($_GET['kind'] ?? '') === 'tv') ? 'series' : 'movies'))) ? 'on' : '' ?>"><?= icon($ic) ?><span><?= $label ?></span></a>
+      <?php endforeach; ?>
+    </nav>
+    <?= form_open('logout', $token, '', 'logout') ?><button class="link"><?= icon('logout') ?><span>Salir</span></button></form>
+  </aside>
 
-  <section class="card">
-    <h2 style="margin-top:0">Agregar enlace</h2>
-    <form method="get" class="row">
-      <input type="search" name="q" value="<?= h($q) ?>" placeholder="Busca la película o serie (ej. Coco, Breaking Bad)">
-      <button>Buscar</button>
-    </form>
-    <?php if (trim((string)($c['tmdb_token'] ?? '')) === ''): ?>
-      <p class="muted">Falta <code>tmdb_token</code> en config.php para poder buscar.</p>
-    <?php elseif ($q !== '' && !$results): ?>
-      <p class="muted">Sin resultados para «<?= h($q) ?>».</p>
+  <main class="content">
+    <?php if ($msg): ?><div class="msg ok"><?= h($msg) ?></div><?php endif; ?>
+    <?php if ($err): ?><div class="msg bad"><?= h($err) ?></div><?php endif; ?>
+    <?php if ($fatal): ?>
+      <div class="msg bad"><b>El panel no puede leer la base de datos.</b><br><?= h($fatal) ?><br>
+        <a href="?view=diag">Abre Diagnóstico</a> para revisar la instalación.</div>
     <?php endif; ?>
-    <?php if ($results): ?>
-      <div class="results" style="margin-top:14px">
-      <?php foreach ($results as $r): ?>
-        <div class="res">
-          <?php if ($r['poster']): ?><img src="<?= h($img . $r['poster']) ?>" alt="" loading="lazy"><?php endif; ?>
-          <div class="b">
-            <b><?= h($r['title']) ?></b><br><small><?= $r['kind'] === 'tv' ? 'Serie' : 'Película' ?><?= $r['year'] ? ' · ' . (int)$r['year'] : '' ?></small>
-            <form method="post" action="?q=<?= h(urlencode($q)) ?>">
-              <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="add">
-              <input type="hidden" name="kind" value="<?= h($r['kind']) ?>"><input type="hidden" name="tmdb_id" value="<?= (int)$r['id'] ?>">
-              <input type="hidden" name="title" value="<?= h($r['title']) ?>"><input type="hidden" name="year" value="<?= h((string)($r['year'] ?? '')) ?>">
-              <input type="hidden" name="poster" value="<?= h((string)($r['poster'] ?? '')) ?>">
-              <input type="url" name="url" placeholder="https://… (Drive, mp4…)" required>
-              <input type="text" name="name" placeholder="Nombre (ej. Latino 1080p)" maxlength="80">
-              <button>Agregar</button>
+
+<?php if ($view === 'home' && !$fatal): ?>
+    <header class="top"><h1>Resumen</h1><a class="btn" href="?view=add"><?= icon('plus') ?>Agregar enlace</a></header>
+    <div class="stats">
+      <a class="stat" href="?view=movies"><b><?= count($data['movies']) ?></b><span>Películas</span></a>
+      <a class="stat" href="?view=series"><b><?= count($data['series']) ?></b><span>Series</span></a>
+      <div class="stat"><b><?= (int)$data['links'] ?></b><span>Enlaces</span></div>
+      <a class="stat" href="?view=channels"><b><?= count($data['channels']) ?></b><span>Canales de TV</span></a>
+    </div>
+    <h2>Agregado recientemente</h2>
+    <?php if (!$data['titles']): ?>
+      <div class="empty card"><p>Todavía no hay enlaces.</p><a class="btn" href="?view=add"><?= icon('plus') ?>Agregar el primero</a></div>
+    <?php else: ?>
+      <div class="posters"><?php foreach (array_slice($data['titles'], 0, 12) as $t): ?>
+        <a class="poster" href="?view=title&kind=<?= h($t['kind']) ?>&id=<?= (int)$t['tmdb_id'] ?>">
+          <?php if ($t['poster']): ?><img src="<?= h(img($t['poster'], 'w342')) ?>" alt="" loading="lazy"><?php else: ?><div class="noimg"><?= h(mb_substr($t['title'], 0, 1)) ?></div><?php endif; ?>
+          <span class="badge"><?= count($t['links']) ?> <?= icon('link') ?></span>
+          <b><?= h($t['title']) ?></b><small><?= $t['kind'] === 'tv' ? 'Serie' : 'Película' ?><?= $t['year'] ? ' · ' . (int)$t['year'] : '' ?></small>
+        </a>
+      <?php endforeach; ?></div>
+    <?php endif; ?>
+    <div class="card apphint">
+      <h3>Conectar la app</h3>
+      <p class="muted">En Vidtube → Configuración → Panel de enlaces, escribe:</p>
+      <p>Dirección: <code><?= h(panel_base_url()) ?></code></p>
+      <p>Clave: la <code>api_key</code> de tu config.php.</p>
+    </div>
+
+<?php elseif (($view === 'movies' || $view === 'series') && !$fatal):
+    $isTv = $view === 'series';
+    $list = $isTv ? $data['series'] : $data['movies'];
+    if ($filter !== '') $list = array_filter($list, function ($t) use ($filter) { return stripos($t['title'], $filter) !== false; });
+    usort($list, function ($a, $b) { return strcasecmp($a['title'], $b['title']); }); ?>
+    <header class="top"><h1><?= $isTv ? 'Series' : 'Películas' ?> <span class="count"><?= count($list) ?></span></h1><a class="btn" href="?view=add"><?= icon('plus') ?>Agregar</a></header>
+    <form method="get" class="bar"><input type="hidden" name="view" value="<?= h($view) ?>">
+      <input type="search" name="f" value="<?= h($filter) ?>" placeholder="Filtrar por título"><button class="btn ghost"><?= icon('search') ?>Filtrar</button></form>
+    <?php if (!$list): ?>
+      <div class="empty card"><p><?= $filter !== '' ? 'Nada coincide con «' . h($filter) . '».' : 'Todavía no hay ' . ($isTv ? 'series' : 'películas') . ' con enlaces.' ?></p></div>
+    <?php else: ?>
+      <div class="posters"><?php foreach ($list as $t): ?>
+        <a class="poster" href="?view=title&kind=<?= h($t['kind']) ?>&id=<?= (int)$t['tmdb_id'] ?>">
+          <?php if ($t['poster']): ?><img src="<?= h(img($t['poster'], 'w342')) ?>" alt="" loading="lazy"><?php else: ?><div class="noimg"><?= h(mb_substr($t['title'], 0, 1)) ?></div><?php endif; ?>
+          <span class="badge"><?= count($t['links']) ?> <?= icon('link') ?></span>
+          <b><?= h($t['title']) ?></b><small><?= $t['year'] ? (int)$t['year'] : '&nbsp;' ?></small>
+        </a>
+      <?php endforeach; ?></div>
+    <?php endif; ?>
+
+<?php elseif ($view === 'title' && !$fatal):
+    $kind = ($_GET['kind'] ?? '') === 'tv' ? 'tv' : 'movie';
+    $id = (int)($_GET['id'] ?? 0);
+    $t = $data['titles']["$kind:$id"] ?? null;
+    $det = $tmdbReady ? tmdb_details($kind, $id) : null;
+    $back = "view=title&kind=$kind&id=$id"; ?>
+    <?php if (!$t): ?>
+      <div class="empty card"><p>Este título ya no tiene enlaces.</p><a class="btn" href="?view=<?= $kind === 'tv' ? 'series' : 'movies' ?>">Volver</a></div>
+    <?php else: ?>
+      <section class="hero" <?php if ($det && $det['backdrop']): ?>style="background-image:linear-gradient(90deg,#0B0C10 30%,rgba(11,12,16,.6)),url('<?= h(img($det['backdrop'], 'w1280')) ?>')"<?php endif; ?>>
+        <?php if ($t['poster']): ?><img class="hp" src="<?= h(img($t['poster'], 'w342')) ?>" alt=""><?php endif; ?>
+        <div>
+          <a class="crumb" href="?view=<?= $kind === 'tv' ? 'series' : 'movies' ?>">← <?= $kind === 'tv' ? 'Series' : 'Películas' ?></a>
+          <h1><?= h($t['title']) ?></h1>
+          <p class="meta"><?= $t['year'] ? (int)$t['year'] . ' · ' : '' ?><?= $kind === 'tv' ? 'Serie' : 'Película' ?>
+            <?php if ($det): ?><?= $det['genres'] ? ' · ' . h(implode(', ', array_slice($det['genres'], 0, 3))) : '' ?>
+              <?= $det['runtime'] ? ' · ' . (int)$det['runtime'] . ' min' : '' ?><?= $det['seasons'] ? ' · ' . (int)$det['seasons'] . ' temporadas' : '' ?>
+              <?= $det['rating'] ? ' · ★ ' . h((string)$det['rating']) : '' ?><?php endif; ?></p>
+          <?php if ($det && $det['overview']): ?><p class="ov"><?= h($det['overview']) ?></p><?php endif; ?>
+        </div>
+      </section>
+
+      <h2>Enlaces <span class="count"><?= count($t['links']) ?></span></h2>
+      <div class="card list">
+        <?php foreach ($t['links'] as $l): ?>
+          <div class="row">
+            <?= form_open('edit', $token, $back, 'grow') ?>
+              <input type="hidden" name="id" value="<?= (int)$l['id'] ?>">
+              <input type="text" name="name" value="<?= h($l['name']) ?>" aria-label="Nombre" class="name">
+              <input type="url" name="url" value="<?= h($l['url']) ?>" aria-label="Enlace" required>
+              <button class="btn ghost">Guardar</button>
             </form>
+            <?= form_open('check', $token, $back) ?><input type="hidden" name="id" value="<?= (int)$l['id'] ?>"><button class="btn ghost">Verificar</button></form>
+            <?= form_open('delete', $token, $back, 'confirm-delete') ?><input type="hidden" name="id" value="<?= (int)$l['id'] ?>"><button class="btn danger">Borrar</button></form>
+          </div>
+        <?php endforeach; ?>
+        <h3>Agregar otro enlace</h3>
+        <?= form_open('add', $token, $back, 'row') ?>
+          <input type="hidden" name="kind" value="<?= h($kind) ?>"><input type="hidden" name="tmdb_id" value="<?= $id ?>">
+          <input type="hidden" name="title" value="<?= h($t['title']) ?>"><input type="hidden" name="year" value="<?= h((string)($t['year'] ?? '')) ?>">
+          <input type="hidden" name="poster" value="<?= h((string)($t['poster'] ?? '')) ?>">
+          <input type="text" name="name" placeholder="Nombre (ej. Latino 1080p)" maxlength="80" class="name">
+          <input type="url" name="url" placeholder="https://… (Drive, Dropbox, .mp4, .m3u8, YouTube)" required>
+          <button class="btn"><?= icon('plus') ?>Agregar</button>
+        </form>
+      </div>
+      <?= form_open('delete_title', $token, '', 'confirm-delete danger-zone') ?>
+        <input type="hidden" name="kind" value="<?= h($kind) ?>"><input type="hidden" name="tmdb_id" value="<?= $id ?>">
+        <button class="btn danger">Quitar este título y todos sus enlaces</button>
+      </form>
+    <?php endif; ?>
+
+<?php elseif ($view === 'add' && !$fatal):
+    $results = ($q !== '' && $tmdbReady) ? tmdb_search($q) : []; ?>
+    <header class="top"><h1>Agregar enlace</h1></header>
+    <form method="get" class="bar big"><input type="hidden" name="view" value="add">
+      <input type="search" name="q" value="<?= h($q) ?>" placeholder="Busca la película o serie (ej. Coco, Breaking Bad)" autofocus>
+      <button class="btn"><?= icon('search') ?>Buscar</button></form>
+    <?php if (!$tmdbReady): ?><div class="msg bad">Falta <code>tmdb_token</code> en config.php para poder buscar.</div>
+    <?php elseif ($q !== '' && !$results): ?><div class="empty card"><p>Sin resultados para «<?= h($q) ?>».</p></div>
+    <?php elseif ($q === ''): ?><p class="muted">Busca un título, elige el correcto y pega su enlace. Los enlaces aparecen en Vidtube en la ficha de ese título.</p><?php endif; ?>
+    <div class="results"><?php foreach ($results as $r): $has = isset($data['titles'][$r['kind'] . ':' . $r['id']]); ?>
+      <div class="res">
+        <?php if ($r['poster']): ?><img src="<?= h(img($r['poster'], 'w342')) ?>" alt="" loading="lazy"><?php else: ?><div class="noimg"><?= h(mb_substr($r['title'], 0, 1)) ?></div><?php endif; ?>
+        <div class="b">
+          <b><?= h($r['title']) ?></b><small><?= $r['kind'] === 'tv' ? 'Serie' : 'Película' ?><?= $r['year'] ? ' · ' . (int)$r['year'] : '' ?><?= $has ? ' · ya tiene enlaces' : '' ?></small>
+          <?= form_open('add', $token) ?>
+            <input type="hidden" name="kind" value="<?= h($r['kind']) ?>"><input type="hidden" name="tmdb_id" value="<?= (int)$r['id'] ?>">
+            <input type="hidden" name="title" value="<?= h($r['title']) ?>"><input type="hidden" name="year" value="<?= h((string)($r['year'] ?? '')) ?>">
+            <input type="hidden" name="poster" value="<?= h((string)($r['poster'] ?? '')) ?>">
+            <input type="url" name="url" placeholder="https://…" required>
+            <input type="text" name="name" placeholder="Nombre (ej. Latino HD)" maxlength="80">
+            <button class="btn"><?= icon('plus') ?>Agregar</button>
+          </form>
+        </div>
+      </div>
+    <?php endforeach; ?></div>
+
+<?php elseif ($view === 'channels' && !$fatal): ?>
+    <header class="top"><h1>Canales de TV <span class="count"><?= count($data['channels']) ?></span></h1></header>
+    <div class="card">
+      <h3>Nuevo canal</h3>
+      <?= form_open('ch_add', $token, 'view=channels', 'chan') ?>
+        <input type="text" name="name" placeholder="Nombre (ej. TV Perú)" maxlength="80" required>
+        <input type="url" name="url" placeholder="Enlace de la señal (.m3u8)" required>
+        <input type="url" name="logo" placeholder="Logo https://… (opcional)">
+        <input type="number" name="position" value="<?= count($data['channels']) + 1 ?>" aria-label="Orden" title="Orden">
+        <button class="btn"><?= icon('plus') ?>Agregar canal</button>
+      </form>
+    </div>
+    <?php if (!$data['channels']): ?>
+      <div class="empty card"><p>Todavía no hay canales. Aparecerán en Vidtube → TV abierta.</p></div>
+    <?php else: ?>
+      <div class="channels"><?php foreach ($data['channels'] as $ch): ?>
+        <div class="chcard">
+          <div class="logo"><?php if ($ch['logo']): ?><img src="<?= h($ch['logo']) ?>" alt=""><?php else: ?><span><?= h($ch['name']) ?></span><?php endif; ?><i>EN VIVO</i></div>
+          <?= form_open('ch_edit', $token, 'view=channels', 'chform') ?>
+            <input type="hidden" name="id" value="<?= (int)$ch['id'] ?>">
+            <input type="text" name="name" value="<?= h($ch['name']) ?>" aria-label="Nombre" required>
+            <input type="url" name="url" value="<?= h($ch['url']) ?>" aria-label="Señal" required>
+            <input type="url" name="logo" value="<?= h((string)$ch['logo']) ?>" placeholder="Logo https://…" aria-label="Logo">
+            <div class="row2"><input type="number" name="position" value="<?= (int)$ch['position'] ?>" aria-label="Orden" title="Orden"><button class="btn ghost">Guardar</button></div>
+          </form>
+          <div class="row2">
+            <?= form_open('ch_check', $token, 'view=channels') ?><input type="hidden" name="id" value="<?= (int)$ch['id'] ?>"><button class="btn ghost">Verificar señal</button></form>
+            <?= form_open('ch_delete', $token, 'view=channels', 'confirm-delete') ?><input type="hidden" name="id" value="<?= (int)$ch['id'] ?>"><button class="btn danger">Borrar</button></form>
           </div>
         </div>
-      <?php endforeach; ?>
-      </div>
+      <?php endforeach; ?></div>
     <?php endif; ?>
-  </section>
 
-  <?php
-    $all = db()->query('SELECT * FROM vt_links ORDER BY title, id')->fetchAll();
-    $grouped = [];
-    foreach ($all as $l) {
-        if ($filter !== '' && stripos($l['title'], $filter) === false && stripos($l['name'], $filter) === false) continue;
-        $grouped[$l['kind'] . ':' . $l['tmdb_id']][] = $l;
-    }
-  ?>
-  <h2>Tus enlaces <span class="muted">(<?= count($all) ?>)</span></h2>
-  <form method="get" class="row" style="margin-bottom:8px">
-    <input type="search" name="f" value="<?= h($filter) ?>" placeholder="Filtrar por título o nombre">
-    <button class="ghost">Filtrar</button>
-  </form>
-  <div class="card">
-    <?php if (!$grouped): ?><p class="muted" style="margin:0">Todavía no hay enlaces. Busca una película arriba para agregar el primero.</p><?php endif; ?>
-    <?php foreach ($grouped as $links): $t = $links[0]; ?>
-      <div class="title">
-        <?php if ($t['poster']): ?><img src="<?= h($img . $t['poster']) ?>" alt=""><?php endif; ?>
-        <div style="flex:1;min-width:0">
-          <b><?= h($t['title']) ?></b><?= $t['year'] ? ' <small>(' . (int)$t['year'] . ')</small>' : '' ?>
-          <span class="tag"><?= $t['kind'] === 'tv' ? 'Serie' : 'Película' ?></span>
-          <?php foreach ($links as $l): ?>
-            <div class="link">
-              <form method="post" class="edit">
-                <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="edit"><input type="hidden" name="id" value="<?= (int)$l['id'] ?>">
-                <input type="text" name="name" value="<?= h($l['name']) ?>" aria-label="Nombre">
-                <input type="url" name="url" value="<?= h($l['url']) ?>" aria-label="Enlace" required>
-                <button class="ghost">Guardar</button>
-              </form>
-              <form method="post" class="confirm-delete">
-                <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$l['id'] ?>">
-                <button class="danger">Borrar</button>
-              </form>
-            </div>
-          <?php endforeach; ?>
-        </div>
-      </div>
-    <?php endforeach; ?>
-  </div>
-  <?php $chs = db()->query('SELECT * FROM vt_channels ORDER BY position, name')->fetchAll(); ?>
-  <h2>Canales de TV <span class="muted">(<?= count($chs) ?>)</span></h2>
-  <div class="card">
-    <p class="muted" style="margin-top:0">Pega el enlace de la señal en vivo del canal (por ejemplo un <code>.m3u8</code> de su página oficial).
-      En Vidtube aparecen en <b>TV abierta → De tu panel</b>.</p>
-    <form method="post" class="chan">
-      <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="ch_add">
-      <input type="text" name="name" placeholder="Nombre (ej. TV Perú)" maxlength="80" required>
-      <input type="url" name="url" placeholder="Enlace de la señal https://…" required>
-      <input type="url" name="logo" placeholder="Logo (opcional) https://…png">
-      <input type="number" name="position" placeholder="Orden" value="0" style="max-width:90px" aria-label="Orden">
-      <button>Agregar canal</button>
-    </form>
-    <?php foreach ($chs as $ch): ?>
-      <div class="link">
-        <form method="post" class="edit chan">
-          <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="ch_edit"><input type="hidden" name="id" value="<?= (int)$ch['id'] ?>">
-          <input type="text" name="name" value="<?= h($ch['name']) ?>" aria-label="Nombre" required>
-          <input type="url" name="url" value="<?= h($ch['url']) ?>" aria-label="Señal" required>
-          <input type="url" name="logo" value="<?= h((string)$ch['logo']) ?>" placeholder="Logo https://…" aria-label="Logo">
-          <input type="number" name="position" value="<?= (int)$ch['position'] ?>" aria-label="Orden">
-          <button class="ghost">Guardar</button>
-        </form>
-        <form method="post" class="confirm-delete">
-          <input type="hidden" name="csrf" value="<?= h($token) ?>"><input type="hidden" name="action" value="ch_delete"><input type="hidden" name="id" value="<?= (int)$ch['id'] ?>">
-          <button class="danger">Borrar</button>
-        </form>
-      </div>
-    <?php endforeach; ?>
-  </div>
-
-  <p class="muted" style="margin-top:20px">La app lee estos enlaces desde <code>api.php</code> con tu clave. Los cambios aparecen en Vidtube al abrir la app o una ficha.</p>
+<?php elseif ($view === 'diag'): ?>
+    <header class="top"><h1>Diagnóstico</h1></header>
+    <div class="card list">
+      <?php foreach (diagnostics() as [$name, $ok, $text]): ?>
+        <div class="diag"><span class="dot <?= $ok ? 'g' : 'r' ?>"></span><b><?= h($name) ?></b><span class="muted"><?= h($text) ?></span></div>
+      <?php endforeach; ?>
+    </div>
+    <div class="card apphint">
+      <h3>Datos para la app</h3>
+      <p>Dirección del panel: <code><?= h(panel_base_url()) ?></code></p>
+      <p>Prueba de la app: <code><?= h(panel_base_url()) ?>api.php?key=TU_CLAVE</code> debe mostrar tus enlaces.</p>
+    </div>
 <?php endif; ?>
-</main>
+  </main>
+</div>
+<?php endif; ?>
 <script src="panel.js"></script>
 </body>
 </html>

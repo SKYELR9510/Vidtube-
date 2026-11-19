@@ -10,7 +10,7 @@ header('Cache-Control: no-store');
 $c = cfg();
 $key = (string)($_GET['key'] ?? ($_SERVER['HTTP_X_VIDTUBE_KEY'] ?? ''));
 $api = (string)($c['api_key'] ?? '');
-if (strlen($api) < 24 || str_starts_with($api, 'CAMBIA_ESTO') || !hash_equals($api, $key)) {
+if (strlen($api) < 24 || starts_with($api, 'CAMBIA_ESTO') || !hash_equals($api, $key)) {
     usleep(300000);
     http_response_code(401);
     echo json_encode(['error' => 'Clave incorrecta']);

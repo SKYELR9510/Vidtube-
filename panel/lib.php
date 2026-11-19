@@ -21,12 +21,16 @@ function db(): PDO {
     static $pdo = null;
     if ($pdo) return $pdo;
     $c = cfg();
-    $pdo = new PDO($c['db_dsn'], $c['db_user'] ?? null, $c['db_pass'] ?? null, [
+    try {
+        $pdo = new PDO($c['db_dsn'], $c['db_user'] ?? null, $c['db_pass'] ?? null, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
-    ]);
-    $sqlite = str_starts_with($c['db_dsn'], 'sqlite:');
+        ]);
+    } catch (PDOException $e) {
+        throw new RuntimeException('No se pudo conectar con la base de datos. Revisa db_dsn, db_user y db_pass en config.php. Detalle: ' . $e->getMessage());
+    }
+    $sqlite = starts_with((string)$c['db_dsn'], 'sqlite:');
     $pdo->exec($sqlite
         ? "CREATE TABLE IF NOT EXISTS vt_links (
              id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,6 +54,9 @@ function db(): PDO {
            ) DEFAULT CHARSET=utf8mb4");
     return $pdo;
 }
+
+/** Igual que str_starts_with (para hostings con PHP 7.4). */
+function starts_with(string $s, string $p): bool { return strncmp($s, $p, strlen($p)) === 0; }
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
@@ -159,4 +166,69 @@ function tmdb_search(string $query): array {
         ];
     }
     return array_slice($out, 0, 12);
+}
+
+
+/** Detalles de una película o serie (sinopsis, fondo, géneros, duración/temporadas). */
+function tmdb_details(string $kind, int $id): ?array {
+    $j = tmdb(($kind === 'tv' ? 'tv' : 'movie') . '/' . $id);
+    if (!$j) return null;
+    $genres = array_map(function ($g) { return $g['name']; }, $j['genres'] ?? []);
+    return [
+        'overview' => $j['overview'] ?? '',
+        'backdrop' => $j['backdrop_path'] ?? null,
+        'poster' => $j['poster_path'] ?? null,
+        'genres' => $genres,
+        'rating' => isset($j['vote_average']) ? round((float)$j['vote_average'], 1) : null,
+        'runtime' => $kind === 'tv' ? null : ($j['runtime'] ?? null),
+        'seasons' => $kind === 'tv' ? ($j['number_of_seasons'] ?? null) : null,
+    ];
+}
+
+/** ¿El enlace responde? Devuelve [ok, texto]. Solo para el administrador (pide la cabecera). */
+function check_url(string $url): array {
+    $u = clean_url($url);
+    if ($u === null) return [false, 'Enlace no válido'];
+    $ch = curl_init($u);
+    curl_setopt_array($ch, [
+        CURLOPT_NOBODY => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5,
+        CURLOPT_TIMEOUT => 12, CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Linux; Android 14) VidtubePanel',
+    ]);
+    curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $type = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+    $err = curl_error($ch);
+    curl_close($ch);
+    if ($code === 0) return [false, 'No responde' . ($err ? " ($err)" : '')];
+    if ($code >= 400) return [false, "Responde con error HTTP $code"];
+    $kind = stripos($type, 'video') !== false ? 'video' : (stripos($type, 'mpegurl') !== false ? 'señal en vivo' : ($type ?: 'contenido'));
+    return [true, "Funciona (HTTP $code · $kind)"];
+}
+
+/** Comprobaciones de la instalación para la sección Diagnóstico. */
+function diagnostics(): array {
+    $c = cfg();
+    $out = [];
+    $out[] = ['PHP', version_compare(PHP_VERSION, '7.4', '>='), 'Versión ' . PHP_VERSION . (version_compare(PHP_VERSION, '7.4', '>=') ? '' : ' (se necesita 7.4 o más)')];
+    $out[] = ['Extensión cURL', function_exists('curl_init'), function_exists('curl_init') ? 'Disponible' : 'Falta: actívala en tu hosting'];
+    try { db()->query('SELECT 1'); $out[] = ['Base de datos', true, 'Conectada y tablas listas']; }
+    catch (Throwable $e) { $out[] = ['Base de datos', false, $e->getMessage()]; }
+    $tok = trim((string)($c['tmdb_token'] ?? ''));
+    if ($tok === '') $out[] = ['TMDB', false, 'Falta tmdb_token en config.php'];
+    else { $ok = tmdb('configuration') !== null; $out[] = ['TMDB', $ok, $ok ? 'Token válido' : 'El token no funciona o TMDB no responde']; }
+    $api = (string)($c['api_key'] ?? '');
+    $okKey = strlen($api) >= 24 && !starts_with($api, 'CAMBIA_ESTO');
+    $out[] = ['Clave de la app', $okKey, $okKey ? 'Configurada (' . strlen($api) . ' caracteres)' : 'Cambia api_key en config.php (mínimo 24 caracteres)'];
+    $https = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    $out[] = ['HTTPS', $https, $https ? 'Activo' : 'Activa SSL en tu hosting: la app solo se conecta por https'];
+    return $out;
+}
+
+/** Dirección del panel para ponerla en la app. */
+function panel_base_url(): string {
+    $host = $_SERVER['HTTP_HOST'] ?? 'tu-dominio';
+    $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+    return 'https://' . $host . $dir . '/';
 }
