@@ -111,7 +111,7 @@ private fun PanelChannelCard(c: PanelChannel, onClick: () -> Unit) {
             LiveBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
         }
         Text(c.name, color = VColors.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp, start = 2.dp))
-        Text(com.silva.vidtube.data.UserLinks.hostOf(c.url), color = VColors.Secondary, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(start = 2.dp))
+        Text("En vivo", color = VColors.Secondary, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(start = 2.dp))
     }
 }
 

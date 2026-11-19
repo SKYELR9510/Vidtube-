@@ -602,8 +602,15 @@ private fun MyLinks(
     onRemove: (com.silva.vidtube.data.UserLink) -> Unit,
     onAdd: () -> Unit,
 ) {
+    // Con el panel incluido en la app, quien la usa solo ve las opciones para ver (sin enlaces
+    // ni botones para agregar); los enlaces se manejan desde el panel.
+    val managed = com.silva.vidtube.data.PanelLinks.hasBuiltIn()
+    if (managed && links.isEmpty()) return
     Column(Modifier.fillMaxWidth()) {
-        SectionTitle("Tus enlaces", subtitle = if (links.isEmpty()) "Agrega un enlace a este título: se guarda solo en tu celular." else null)
+        SectionTitle(
+            if (managed) "Ver" else "Tus enlaces",
+            subtitle = if (links.isEmpty()) "Agrega un enlace a este título: se guarda solo en tu celular." else null,
+        )
         for (l in links) {
             Row(
                 Modifier.fillMaxWidth().clickable(onClickLabel = "Abrir ${l.name}") { onOpen(l) }
@@ -621,23 +628,16 @@ private fun MyLinks(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(l.name, color = VColors.Text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        (if (l.fromPanel) "Del panel · " else "") + when (l.kind) {
-                            com.silva.vidtube.data.UserLink.Kind.YOUTUBE -> "YouTube · se ve en Vidtube"
-                            com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · en el reproductor de Vidtube"
-                            else -> com.silva.vidtube.data.UserLinks.hostOf(l.url) + " · página: se busca su video y se ve en Vidtube"
-                        },
-                        color = VColors.Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
+                    Text("Toca para ver", color = VColors.Secondary, fontSize = 12.sp, maxLines = 1)
                 }
-                if (!l.fromPanel) {
+                if (!l.fromPanel && !managed) {
                     androidx.compose.material3.IconButton(onClick = { onRemove(l) }) {
                         Icon(Icons.Outlined.Close, "Quitar enlace", tint = VColors.Muted)
                     }
                 }
             }
         }
-        Row(
+        if (!managed) Row(
             Modifier.padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(20.dp))
                 .border(1.dp, VColors.Divider, RoundedCornerShape(20.dp)).clickable(onClick = onAdd)
                 .padding(horizontal = 14.dp, vertical = 9.dp),

@@ -112,7 +112,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                     context,
                     VideoItem(
                         url = found.url, title = title.ifBlank { "Enlace" }, thumbnail = null,
-                        channelName = com.silva.vidtube.data.UserLinks.hostOf(url), channelUrl = null, channelAvatar = null,
+                        channelName = "", channelUrl = null, channelAvatar = null,
                         durationSec = 0, views = -1, uploaded = null, isLive = false,
                     ),
                 )
