@@ -24,7 +24,15 @@ data class PanelTitle(
 }
 
 /** Canal de TV agregado en el panel (enlace de su señal en vivo). */
-data class PanelChannel(val name: String, val url: String, val logo: String?, val backups: List<String> = emptyList())
+data class PanelChannel(
+    val name: String,
+    /** Enlace principal (vacío si el canal solo se ve por YouTube). */
+    val url: String,
+    val logo: String?,
+    val backups: List<String> = emptyList(),
+    /** Canal oficial de YouTube: si está en vivo, se usa esa transmisión. */
+    val youtube: String? = null,
+)
 
 /**
  * Enlaces del panel web (PHP en tu hosting). La app solo los lee con la clave;
@@ -124,8 +132,9 @@ object PanelLinks {
                 add(c.optString("url"))
                 c.optJSONArray("backups")?.let { b -> for (j in 0 until b.length()) add(b.optString(j)) }
             }.mapNotNull { UserLinks.normalize(it) }.distinct()
-            if (all.isEmpty()) return@mapNotNull null
-            PanelChannel(name, all.first(), c.optString("logo").takeIf { it.startsWith("https://") }, all.drop(1))
+            val yt = UserLinks.normalize(c.optString("youtube"))?.takeIf { UserLinks.isYoutube(it) }
+            if (all.isEmpty() && yt == null) return@mapNotNull null
+            PanelChannel(name, all.firstOrNull() ?: "", c.optString("logo").takeIf { it.startsWith("https://") }, all.drop(1), yt)
         }
     }
 

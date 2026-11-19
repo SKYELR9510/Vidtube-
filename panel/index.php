@@ -89,7 +89,18 @@ if (logged_in() && $_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
             case 'ch_add':
             case 'ch_edit':
                 $name = trim(mb_substr((string)($_POST['name'] ?? ''), 0, 80));
-                $url = clean_url((string)($_POST['url'] ?? ''));
+                $urlRaw = trim((string)($_POST['url'] ?? ''));
+                $url = $urlRaw === '' ? '' : clean_url($urlRaw);
+                // Canal oficial de YouTube (opcional): si transmite en vivo, la app usa esa transmisión
+                $ytRaw = trim((string)($_POST['youtube'] ?? ''));
+                $yt = null;
+                if ($ytRaw !== '') {
+                    $yt = clean_url($ytRaw);
+                    $host = $yt ? strtolower((string)parse_url($yt, PHP_URL_HOST)) : '';
+                    if ($yt === null || !preg_match('~(^|\.)youtube\.com$~', $host)) {
+                        flash('bad', 'El canal de YouTube debe ser un enlace como https://www.youtube.com/@nombre'); break;
+                    }
+                }
                 // Respaldos opcionales: si el principal falla, la app usa estos
                 $b = [];
                 foreach (['url2', 'url3'] as $f) {
@@ -103,14 +114,15 @@ if (logged_in() && $_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 $pos = (int)($_POST['position'] ?? 0);
                 if ($name === '') { flash('bad', 'Escribe el nombre del canal.'); break; }
                 if ($url === null) { flash('bad', 'El enlace de la señal debe empezar con https:// o http://'); break; }
+                if ($url === '' && $yt === null) { flash('bad', 'Pon el enlace de la señal o el canal oficial de YouTube.'); break; }
                 if ($logoRaw !== '' && ($logo === null || !starts_with($logo, 'https://'))) { flash('bad', 'El logo debe ser un enlace https:// a una imagen.'); break; }
                 if ($action === 'ch_add') {
-                    $pdo->prepare('INSERT INTO vt_channels (name, url, url2, url3, logo, position, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)')
-                        ->execute([$name, $url, $b['url2'], $b['url3'], $logo, $pos, now(), now()]);
+                    $pdo->prepare('INSERT INTO vt_channels (name, url, url2, url3, youtube, logo, position, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
+                        ->execute([$name, $url, $b['url2'], $b['url3'], $yt, $logo, $pos, now(), now()]);
                     flash('ok', "Canal «{$name}» agregado.");
                 } else {
-                    $pdo->prepare('UPDATE vt_channels SET name = ?, url = ?, url2 = ?, url3 = ?, logo = ?, position = ?, updated_at = ? WHERE id = ?')
-                        ->execute([$name, $url, $b['url2'], $b['url3'], $logo, $pos, now(), (int)$_POST['id']]);
+                    $pdo->prepare('UPDATE vt_channels SET name = ?, url = ?, url2 = ?, url3 = ?, youtube = ?, logo = ?, position = ?, updated_at = ? WHERE id = ?')
+                        ->execute([$name, $url, $b['url2'], $b['url3'], $yt, $logo, $pos, now(), (int)$_POST['id']]);
                     flash('ok', 'Canal actualizado.');
                 }
                 $back = 'view=channels';
@@ -378,9 +390,10 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
       <h3>Nuevo canal</h3>
       <?= form_open('ch_add', $token, 'view=channels', 'chan') ?>
         <input type="text" name="name" placeholder="Nombre (ej. TV Perú)" maxlength="80" required>
-        <input type="url" name="url" placeholder="Enlace principal (.m3u8)" required>
+        <input type="url" name="url" placeholder="Enlace principal (.m3u8)">
         <input type="url" name="url2" placeholder="Respaldo 1 (opcional)">
         <input type="url" name="url3" placeholder="Respaldo 2 (opcional)">
+        <input type="url" name="youtube" placeholder="Canal oficial de YouTube (opcional) https://www.youtube.com/@…">
         <input type="url" name="logo" placeholder="Logo https://… (opcional)">
         <input type="number" name="position" value="<?= count($data['channels']) + 1 ?>" aria-label="Orden" title="Orden">
         <button class="btn"><?= icon('plus') ?>Agregar canal</button>
@@ -389,16 +402,17 @@ $tmdbReady = trim((string)($c['tmdb_token'] ?? '')) !== '';
     <?php if (!$data['channels']): ?>
       <div class="empty card"><p>Todavía no hay canales. Aparecerán en Vidtube → TV abierta.</p></div>
     <?php else: ?>
-      <p class="muted">Si el enlace principal no funciona, la app pasa sola al respaldo 1 y luego al respaldo 2. En películas y series puedes agregar varios enlaces a un título: se prueban en orden.</p>
+      <p class="muted">Si el canal tiene su <b>canal oficial de YouTube</b> y está transmitiendo en vivo, la app usa YouTube. Si no, usa el enlace principal; si ese no funciona, pasa sola al respaldo 1 y luego al respaldo 2. En películas y series puedes agregar varios enlaces a un título: se prueban en orden.</p>
       <div class="channels"><?php foreach ($data['channels'] as $ch): ?>
         <div class="chcard">
           <div class="logo"><?php if ($ch['logo']): ?><img src="<?= h($ch['logo']) ?>" alt=""><?php else: ?><span><?= h($ch['name']) ?></span><?php endif; ?><i>EN VIVO</i></div>
           <?= form_open('ch_edit', $token, 'view=channels', 'chform') ?>
             <input type="hidden" name="id" value="<?= (int)$ch['id'] ?>">
             <input type="text" name="name" value="<?= h($ch['name']) ?>" aria-label="Nombre" required>
-            <input type="url" name="url" value="<?= h($ch['url']) ?>" aria-label="Enlace principal" title="Enlace principal" required>
+            <input type="url" name="url" value="<?= h($ch['url']) ?>" placeholder="Enlace principal (.m3u8)" aria-label="Enlace principal" title="Enlace principal">
             <input type="url" name="url2" value="<?= h((string)($ch['url2'] ?? '')) ?>" placeholder="Respaldo 1 (opcional)" aria-label="Respaldo 1">
             <input type="url" name="url3" value="<?= h((string)($ch['url3'] ?? '')) ?>" placeholder="Respaldo 2 (opcional)" aria-label="Respaldo 2">
+            <input type="url" name="youtube" value="<?= h((string)($ch['youtube'] ?? '')) ?>" placeholder="Canal oficial de YouTube (opcional)" aria-label="Canal de YouTube" title="Si transmite en vivo, la app usa YouTube">
             <input type="url" name="logo" value="<?= h((string)$ch['logo']) ?>" placeholder="Logo https://…" aria-label="Logo">
             <div class="row2"><input type="number" name="position" value="<?= (int)$ch['position'] ?>" aria-label="Orden" title="Orden"><button class="btn ghost">Guardar</button></div>
           </form>

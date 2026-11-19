@@ -26,4 +26,15 @@ class LiveTvTest {
         // Se descartan los inválidos y los repetidos; el orden se respeta
         assertEquals(listOf("https://b.pe/e2.m3u8", "https://c.pe/e3.m3u8"), c.backups)
     }
+
+    @Test
+    fun canalSoloConYoutubeOficial() {
+        val o = JSONObject("""{"channels":[
+            {"name":"Willax","url":"","backups":[],"youtube":"https://www.youtube.com/@WillaxTV","logo":null},
+            {"name":"Falso","url":"","backups":[],"youtube":"https://evil.com/@x","logo":null}]}""")
+        val list = PanelLinks.parseChannels(o)
+        assertEquals(listOf("Willax"), list.map { it.name })
+        assertEquals("", list[0].url)
+        assertEquals("https://www.youtube.com/@WillaxTV", list[0].youtube)
+    }
 }

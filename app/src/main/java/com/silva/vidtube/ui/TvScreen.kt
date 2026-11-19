@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.silva.vidtube.data.PanelChannel
 import com.silva.vidtube.data.PanelLinks
+import com.silva.vidtube.data.Repository
 import com.silva.vidtube.data.VideoItem
 import kotlinx.coroutines.launch
 
@@ -51,12 +52,34 @@ import kotlinx.coroutines.launch
 @Composable
 fun TvContent(onVideo: (VideoItem) -> Unit) {
     val panel by PanelLinks.channels.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var refreshing by androidx.compose.runtime.remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { PanelLinks.refresh() }
+    // Transmisión en vivo en YouTube de cada canal que tenga su canal oficial (clave: dirección del canal)
+    val ytLive = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateMapOf<String, VideoItem?>() }
+    suspend fun checkYoutube() {
+        val gate = kotlinx.coroutines.sync.Semaphore(3)
+        kotlinx.coroutines.coroutineScope {
+            PanelLinks.channels.value.mapNotNull { it.youtube }.distinct().forEach { yt ->
+                launch { gate.acquire(); try { ytLive[yt] = Repository.channelLive(yt) } finally { gate.release() } }
+            }
+        }
+    }
+    LaunchedEffect(Unit) { PanelLinks.refresh(); checkYoutube() }
+    fun play(c: PanelChannel) {
+        val live = c.youtube?.let { ytLive[it] }
+        when {
+            live != null -> onVideo(live)
+            c.url.isNotEmpty() -> {
+                com.silva.vidtube.player.NowPlaying.alternates[c.url] = c.backups
+                onVideo(liveItem(c))
+            }
+            else -> android.widget.Toast.makeText(context, "${c.name} no está transmitiendo ahora en YouTube.", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
     PullToRefreshBox(
         isRefreshing = refreshing,
-        onRefresh = { refreshing = true; scope.launch { PanelLinks.refresh(force = true); refreshing = false } },
+        onRefresh = { refreshing = true; scope.launch { PanelLinks.refresh(force = true); checkYoutube(); refreshing = false } },
         modifier = Modifier.fillMaxSize(),
     ) {
         LazyVerticalGrid(
@@ -75,11 +98,9 @@ fun TvContent(onVideo: (VideoItem) -> Unit) {
                     )
                 }
             }
-            items(panel, key = { "p:" + it.url }) { c ->
-                PanelChannelCard(c) {
-                    com.silva.vidtube.player.NowPlaying.alternates[c.url] = c.backups
-                    onVideo(liveItem(c))
-                }
+            items(panel, key = { "p:" + it.name + it.url }) { c ->
+                val live = c.youtube?.let { ytLive[it] }
+                PanelChannelCard(c, live, onAirKnown = c.youtube == null || ytLive.containsKey(c.youtube)) { play(c) }
             }
         }
     }
@@ -101,7 +122,7 @@ private fun liveItem(c: PanelChannel) = VideoItem(
 )
 
 @Composable
-private fun PanelChannelCard(c: PanelChannel, onClick: () -> Unit) {
+private fun PanelChannelCard(c: PanelChannel, ytLive: VideoItem?, onAirKnown: Boolean, onClick: () -> Unit) {
     Column(Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Ver ${c.name}", onClick = onClick)) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp)).background(VColors.Card)
@@ -113,10 +134,24 @@ private fun PanelChannelCard(c: PanelChannel, onClick: () -> Unit) {
             } else {
                 Text(c.name, color = VColors.Text, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
             }
-            LiveBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
+            if (ytLive != null || c.url.isNotEmpty()) LiveBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
+            if (ytLive != null) {
+                Text(
+                    "YouTube", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xCC0B0C10)).padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
         }
         Text(c.name, color = VColors.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp, start = 2.dp))
-        Text("En vivo", color = VColors.Secondary, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(start = 2.dp))
+        Text(
+            when {
+                ytLive != null -> "En vivo en YouTube"
+                c.url.isNotEmpty() -> "En vivo"
+                !onAirKnown -> "Buscando transmisión…"
+                else -> "Sin transmisión ahora"
+            },
+            color = VColors.Secondary, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(start = 2.dp))
     }
 }
 

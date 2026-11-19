@@ -236,6 +236,25 @@ object Repository {
     }
 
     /** Últimos shorts de un canal (pestaña Shorts del canal). */
+    /**
+     * Transmisión en vivo actual del canal oficial de YouTube (pestaña «En vivo»), o null si
+     * no está transmitiendo.
+     */
+    suspend fun channelLive(url: String): VideoItem? = withContext(Dispatchers.IO) {
+        runCatching {
+            val info = ChannelInfo.getInfo(yt, url)
+            val tab = info.tabs.firstOrNull { it.contentFilters.contains(ChannelTabs.LIVESTREAMS) }
+                ?: return@runCatching null
+            ChannelTabInfo.getInfo(yt, tab).relatedItems
+                .filterIsInstance<StreamInfoItem>()
+                .firstOrNull {
+                    it.streamType == org.schabi.newpipe.extractor.stream.StreamType.LIVE_STREAM ||
+                        it.streamType == org.schabi.newpipe.extractor.stream.StreamType.AUDIO_LIVE_STREAM
+                }
+                ?.let { VideoItem.from(it).copy(channelName = info.name ?: "", channelUrl = url, isLive = true) }
+        }.getOrNull()
+    }
+
     suspend fun channelShorts(channel: ChannelItem, limit: Int = 8): List<VideoItem> = withContext(Dispatchers.IO) {
         runCatching {
             val info = ChannelInfo.getInfo(yt, channel.url)
