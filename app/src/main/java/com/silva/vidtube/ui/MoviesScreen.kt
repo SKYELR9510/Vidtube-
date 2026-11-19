@@ -302,7 +302,7 @@ fun MovieScreen(
                             modifier = Modifier.weight(1f),
                         ) {
                             if (first != null) onVideo(first)
-                            else if (mine != null) openUserLink(context, mine, d.movie, onVideo, onWeb)
+                            else if (mine != null) openUserLink(context, mine, d.movie, onVideo, onWeb, myLinks)
                             else if (platformUrl != null) openLink(context, platformUrl)
                             else if (other != null) onVideo(other)
                         }
@@ -313,7 +313,7 @@ fun MovieScreen(
                     }
                 }
                 item("mylinks") {
-                    MyLinks(myLinks, onOpen = { l -> openUserLink(context, l, d.movie, onVideo, onWeb) },
+                    MyLinks(myLinks, onOpen = { l -> openUserLink(context, l, d.movie, onVideo, onWeb, myLinks) },
                         onRemove = { l -> if (!l.fromPanel) com.silva.vidtube.data.UserLinks.remove(linkKey, l) }, onAdd = { addLink = true })
                 }
                 d.watch?.let { w ->
@@ -702,6 +702,8 @@ private fun openUserLink(
     movie: TmdbMovie,
     onVideo: (VideoItem) -> Unit,
     onWeb: (String, String) -> Unit,
+    /** Todos los enlaces del título: los demás archivos de video sirven de respaldo. */
+    all: List<com.silva.vidtube.data.UserLink> = emptyList(),
 ) {
     fun item(url: String) = VideoItem(
         url = url, title = movie.title, thumbnail = movie.backdrop ?: movie.poster, channelName = link.name,
@@ -712,7 +714,11 @@ private fun openUserLink(
             val watch = com.silva.vidtube.data.UserLinks.youtubeWatchUrl(link.url)
             if (watch != null) onVideo(item(watch)) else onWeb(link.url, movie.title)
         }
-        com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> onVideo(item(link.url))
+        com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE -> {
+            com.silva.vidtube.player.NowPlaying.alternates[link.url] =
+                all.filter { it.url != link.url && it.kind == com.silva.vidtube.data.UserLink.Kind.VIDEO_FILE }.map { it.url }
+            onVideo(item(link.url))
+        }
         else -> onWeb(link.url, movie.title)
     }
 }

@@ -24,7 +24,7 @@ data class PanelTitle(
 }
 
 /** Canal de TV agregado en el panel (enlace de su señal en vivo). */
-data class PanelChannel(val name: String, val url: String, val logo: String?)
+data class PanelChannel(val name: String, val url: String, val logo: String?, val backups: List<String> = emptyList())
 
 /**
  * Enlaces del panel web (PHP en tu hosting). La app solo los lee con la clave;
@@ -118,9 +118,14 @@ object PanelLinks {
         val arr = o.optJSONArray("channels") ?: return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
             val c = arr.optJSONObject(i) ?: return@mapNotNull null
-            val url = UserLinks.normalize(c.optString("url")) ?: return@mapNotNull null
             val name = c.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            PanelChannel(name, url, c.optString("logo").takeIf { it.startsWith("https://") })
+            // Enlace principal + respaldos (los inválidos se descartan)
+            val all = buildList {
+                add(c.optString("url"))
+                c.optJSONArray("backups")?.let { b -> for (j in 0 until b.length()) add(b.optString(j)) }
+            }.mapNotNull { UserLinks.normalize(it) }.distinct()
+            if (all.isEmpty()) return@mapNotNull null
+            PanelChannel(name, all.first(), c.optString("logo").takeIf { it.startsWith("https://") }, all.drop(1))
         }
     }
 

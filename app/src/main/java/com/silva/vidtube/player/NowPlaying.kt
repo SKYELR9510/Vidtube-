@@ -63,6 +63,47 @@ object NowPlaying {
     private var lastInfo: StreamInfo? = null
     private var autoFailures = 0
 
+    /** Enlaces de respaldo de un enlace principal (canales y títulos del panel). */
+    val alternates = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+    private val directQueue = ArrayDeque<String>()
+    private var directJob: Job? = null
+
+    /** Pasa al siguiente enlace de respaldo. false si ya no quedan. */
+    private fun nextDirect(context: Context): Boolean {
+        val next = directQueue.removeFirstOrNull() ?: return false
+        val s = _state.value ?: return false
+        val pos = if (s.video.isLive) 0L else (PlayerHolder.playerOrNull?.currentPosition ?: 0L)
+        Log.w("Vidtube", "Enlace sin respuesta; uso el de respaldo")
+        android.widget.Toast.makeText(context, "Cambiando a otra señal…", android.widget.Toast.LENGTH_SHORT).show()
+        runCatching { PlayerHolder.playDirect(context, com.silva.vidtube.data.UserLinks.directUrl(next), pos) }
+        return true
+    }
+
+    /** Si un enlace directo se queda cargando 15 s, se prueba el siguiente de respaldo. */
+    private fun startDirectWatch(context: Context, video: VideoItem) {
+        directJob?.cancel()
+        directJob = scope.launch {
+            var stuck = 0
+            var lastPos = -1L
+            while (isActive) {
+                delay(1_000)
+                val p = PlayerHolder.playerOrNull ?: break
+                if (_state.value?.video?.url != video.url) break
+                val pos = p.currentPosition
+                val waiting = p.playWhenReady && (p.playbackState == Player.STATE_BUFFERING || p.playbackState == Player.STATE_IDLE)
+                if (waiting && pos == lastPos) stuck++ else stuck = 0
+                lastPos = pos
+                if (stuck >= 15) {
+                    stuck = 0
+                    if (!nextDirect(context)) {
+                        _state.value = _state.value?.copy(error = "Esta señal no está disponible ahora. Intenta más tarde.")
+                        break
+                    }
+                }
+            }
+        }
+    }
+
     fun open(context: Context, video: VideoItem, expand: Boolean = true, auto: Boolean = false) {
         val appContext = context.applicationContext
         attachListener(appContext)
@@ -85,6 +126,8 @@ object NowPlaying {
         // Enlaces propios (Drive, Dropbox, archivos de video): se reproducen directo, sin YouTube
         if (!com.silva.vidtube.data.UserLinks.isYoutube(video.url)) {
             _state.value = State(video = video, loading = false, quality = quality)
+            directQueue.clear()
+            directQueue.addAll(alternates[video.url].orEmpty())
             runCatching {
                 PlayerHolder.playDirect(appContext, com.silva.vidtube.data.UserLinks.directUrl(video.url), Library.position(video.url))
             }.onFailure { e ->
@@ -93,6 +136,7 @@ object NowPlaying {
             Library.addToHistory(video)
             releaseWakeLock()
             startPositionSaver()
+            startDirectWatch(appContext, video)
             return
         }
         loadJob = scope.launch {
@@ -164,6 +208,12 @@ object NowPlaying {
         PlayerHolder.player(context).addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED && !PlayerHolder.shortsMode) onEnded(context)
+            }
+
+            // Enlace propio o del panel que falla: se pasa solo al de respaldo
+            override fun onPlayerError(error: com.google.android.exoplayer2.PlaybackException) {
+                val s = _state.value ?: return
+                if (!com.silva.vidtube.data.UserLinks.isYoutube(s.video.url)) nextDirect(context)
             }
 
             // El botón ■ de la notificación vacía el reproductor: cerramos el video

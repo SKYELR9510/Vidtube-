@@ -52,6 +52,11 @@ function db(): PDO {
              id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL, url TEXT NOT NULL, logo TEXT NULL,
              position INT NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL
            ) DEFAULT CHARSET=utf8mb4");
+    // Respaldo de señal (paneles instalados antes no tienen estas columnas)
+    foreach (['url2', 'url3'] as $col) {
+        try { $pdo->query("SELECT $col FROM vt_channels LIMIT 1"); }
+        catch (PDOException $e) { $pdo->exec("ALTER TABLE vt_channels ADD COLUMN $col TEXT NULL"); }
+    }
     return $pdo;
 }
 

@@ -16,4 +16,14 @@ class LiveTvTest {
         assertEquals(listOf("TV Perú", "Sin logo"), list.map { it.name })
         assertEquals(null, list[1].logo)
     }
+
+    @Test
+    fun canalConEnlacesDeRespaldo() {
+        val o = JSONObject("""{"channels":[{"name":"ESPN","url":"https://a.pe/e.m3u8",
+            "backups":["https://b.pe/e2.m3u8","javascript:x","https://a.pe/e.m3u8","https://c.pe/e3.m3u8"],"logo":null}]}""")
+        val c = PanelLinks.parseChannels(o).single()
+        assertEquals("https://a.pe/e.m3u8", c.url)
+        // Se descartan los inválidos y los repetidos; el orden se respeta
+        assertEquals(listOf("https://b.pe/e2.m3u8", "https://c.pe/e3.m3u8"), c.backups)
+    }
 }

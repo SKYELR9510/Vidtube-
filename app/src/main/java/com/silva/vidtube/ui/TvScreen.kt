@@ -75,7 +75,12 @@ fun TvContent(onVideo: (VideoItem) -> Unit) {
                     )
                 }
             }
-            items(panel, key = { "p:" + it.url }) { c -> PanelChannelCard(c) { onVideo(liveItem(c)) } }
+            items(panel, key = { "p:" + it.url }) { c ->
+                PanelChannelCard(c) {
+                    com.silva.vidtube.player.NowPlaying.alternates[c.url] = c.backups
+                    onVideo(liveItem(c))
+                }
+            }
         }
     }
 }
