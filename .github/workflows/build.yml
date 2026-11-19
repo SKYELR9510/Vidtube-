@@ -54,6 +54,19 @@ jobs:
           python3 -c "import json;d=json.load(open('/tmp/tmdb.json'));print('TMDB: prueba ->', d.get('title'), d.get('release_date'))" || true
           [ "$CODE" = "200" ]
 
+      - name: Comprobar panel de enlaces
+        continue-on-error: true
+        env:
+          KEY: ${{ secrets.VIDTUBE_PANEL_KEY }}
+          PURL: ${{ secrets.VIDTUBE_PANEL_URL }}
+        run: |
+          if [ -z "$KEY" ]; then echo "Panel: falta el secreto VIDTUBE_PANEL_KEY"; exit 1; fi
+          BASE="${PURL:-https://vidtube.inversionesilva.com/}"
+          CODE=$(curl -s -o /tmp/panel.json -w "%{http_code}" -G --data-urlencode "key=$KEY" "${BASE%/}/api.php")
+          echo "Panel: respuesta HTTP $CODE"
+          python3 -c "import json;d=json.load(open('/tmp/panel.json'));print('Panel:', len(d.get('titles',[])), 'títulos,', len(d.get('channels',[])), 'canales', d.get('error',''))" || head -c 300 /tmp/panel.json
+          [ "$CODE" = "200" ]
+
       - name: Compilar APK firmado
         env:
           VIDTUBE_STORE_PASSWORD: ${{ secrets.VIDTUBE_STORE_PASSWORD }}
