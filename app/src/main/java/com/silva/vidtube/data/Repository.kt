@@ -228,17 +228,6 @@ object Repository {
         found.values.sortedByDescending { it.verified }
     }
 
-    // ---------- TV de señal abierta ----------
-    /** Transmisión en vivo oficial de un canal de TV en YouTube (canal verificado), o null. */
-    suspend fun findLive(ch: TvChannel): VideoItem? = withContext(Dispatchers.IO) {
-        val handler = yt.searchQHFactory.fromQuery(ch.query, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
-        val info = SearchInfo.getInfo(yt, handler)
-        info.relatedItems.filterIsInstance<StreamInfoItem>()
-            .filter { it.streamType == org.schabi.newpipe.extractor.stream.StreamType.LIVE_STREAM }
-            .map { VideoItem.from(it) }
-            .firstOrNull { it.verified && LiveTv.matches(it.channelName, ch) }
-    }
-
     // ---------- Shorts ----------
     /** Shorts sobre un tema (búsqueda con #shorts). */
     suspend fun shortsSearch(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
