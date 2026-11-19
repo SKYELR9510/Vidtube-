@@ -147,7 +147,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                             launchSingleTop = true
                             restoreState = true
                         }
-                    }, onMovie = openTitle)
+                    }, onMovie = openTitle, onWeb = openWeb)
                 }
                 composable("more/{id}/{title}") { entry ->
                     MoreScreen(
@@ -203,7 +203,7 @@ fun VidtubeRoot(isInPip: Boolean) {
                         onWeb = openWeb,
                     )
                 }
-                composable("tv") { TvScreen(onBack = { nav.popBackStack() }, onVideo = openVideo) }
+                composable("tv") { TvScreen(onBack = { nav.popBackStack() }, onVideo = openVideo, onWeb = openWeb) }
                 composable("web/{url}/{title}") { entry ->
                     WebPlayerScreen(
                         url = Uri.decode(entry.arguments?.getString("url") ?: ""),

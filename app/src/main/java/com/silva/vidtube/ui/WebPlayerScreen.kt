@@ -148,6 +148,13 @@ fun WebPlayerScreen(url: String, title: String, onBack: () -> Unit) {
                         webChromeClient = object : WebChromeClient() {
                             override fun onProgressChanged(view: WebView, newProgress: Int) { progress = newProgress }
 
+                            // Las señales oficiales de TV suelen usar video protegido (DRM): solo se permite eso;
+                            // cámara, micrófono y lo demás se niegan.
+                            override fun onPermissionRequest(request: android.webkit.PermissionRequest) {
+                                val allowed = request.resources.filter { it == android.webkit.PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID }
+                                if (allowed.isNotEmpty()) request.grant(allowed.toTypedArray()) else request.deny()
+                            }
+
                             // Ventanas emergentes: se rechazan siempre
                             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
                                 blocked++
@@ -174,6 +181,8 @@ fun WebPlayerScreen(url: String, title: String, onBack: () -> Unit) {
                         }
                         // Descargas que la página intente iniciar: no se hacen solas
                         setDownloadListener { _, _, _, _, _ -> blocked++ }
+                        // Algunas señales oficiales necesitan cookies de su reproductor
+                        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                         loadUrl(url)
                         webView = this
                     }

@@ -96,7 +96,7 @@ class TvViewModel : ViewModel() {
 /** Canales de TV de señal abierta (YouTube oficial) y los del panel. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun TvContent(onVideo: (VideoItem) -> Unit, vm: TvViewModel = viewModel()) {
+fun TvContent(onVideo: (VideoItem) -> Unit, onWeb: (String, String) -> Unit, vm: TvViewModel = viewModel()) {
     LaunchedEffect(Unit) { vm.load() }
     val panel by PanelLinks.channels.collectAsState()
     PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = { vm.load(force = true) }, modifier = Modifier.fillMaxSize()) {
@@ -109,8 +109,8 @@ fun TvContent(onVideo: (VideoItem) -> Unit, vm: TvViewModel = viewModel()) {
         ) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "intro") {
                 Text(
-                    "Señal abierta de Perú desde sus canales oficiales de YouTube. Si un canal no está transmitiendo, " +
-                        "aparece «Sin transmisión». Desliza hacia abajo para actualizar.",
+                    "Señal abierta de Perú: los canales con «EN VIVO 24 H» abren su señal oficial dentro de Vidtube; " +
+                        "los demás, su transmisión oficial de YouTube o su web. Desliza hacia abajo para actualizar.",
                     color = VColors.Secondary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
@@ -120,7 +120,7 @@ fun TvContent(onVideo: (VideoItem) -> Unit, vm: TvViewModel = viewModel()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "yt_t") { Header("Canales de señal abierta") }
             }
             items(LiveTv.peru, key = { it.id }) { ch ->
-                ChannelCard(ch, vm.states[ch.id] ?: LiveState.Searching) { v -> onVideo(v) }
+                ChannelCard(ch, vm.states[ch.id] ?: LiveState.Searching, onPlay = onVideo, onWeb = onWeb)
             }
         }
     }
@@ -128,10 +128,10 @@ fun TvContent(onVideo: (VideoItem) -> Unit, vm: TvViewModel = viewModel()) {
 
 /** Pantalla propia (desde Explorar). */
 @Composable
-fun TvScreen(onBack: () -> Unit, onVideo: (VideoItem) -> Unit) {
+fun TvScreen(onBack: () -> Unit, onVideo: (VideoItem) -> Unit, onWeb: (String, String) -> Unit) {
     androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(VColors.Background)) {
         VTopBar(title = "TV abierta", onBack = onBack)
-        TvContent(onVideo)
+        TvContent(onVideo, onWeb)
     }
 }
 
@@ -145,12 +145,25 @@ private fun liveItem(c: PanelChannel) = VideoItem(
     channelAvatar = c.logo, durationSec = 0, views = -1, uploaded = null, isLive = true,
 )
 
+/**
+ * Tarjeta de un canal:
+ *  - Con página oficial 24 h (América, Latina, Panamericana): al tocarla se abre esa señal dentro de
+ *    Vidtube; si además hay transmisión en YouTube aparece el botón «YouTube».
+ *  - Sin página 24 h: se ve su transmisión de YouTube; si no hay, se ofrece abrir su web oficial.
+ */
 @Composable
-private fun ChannelCard(ch: TvChannel, state: LiveState, onPlay: (VideoItem) -> Unit) {
+private fun ChannelCard(ch: TvChannel, state: LiveState, onPlay: (VideoItem) -> Unit, onWeb: (String, String) -> Unit) {
     val onAir = state as? LiveState.OnAir
+    val web = ch.liveUrl ?: ch.siteUrl
+    val main: (() -> Unit)? = when {
+        ch.liveUrl != null -> ({ onWeb(ch.liveUrl, ch.name + " en vivo") })
+        onAir != null -> ({ onPlay(onAir.video) })
+        ch.siteUrl != null -> ({ onWeb(ch.siteUrl, ch.name) })
+        else -> null
+    }
     Column(
         Modifier.clip(RoundedCornerShape(12.dp))
-            .clickable(enabled = onAir != null, onClickLabel = "Ver ${ch.name}") { onAir?.let { onPlay(it.video) } }
+            .clickable(enabled = main != null, onClickLabel = "Ver ${ch.name}") { main?.invoke() }
     ) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp))
@@ -158,7 +171,7 @@ private fun ChannelCard(ch: TvChannel, state: LiveState, onPlay: (VideoItem) -> 
                 .border(1.dp, VColors.Divider, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            if (onAir != null) {
+            if (onAir != null && ch.liveUrl == null) {
                 AsyncImage(
                     model = onAir.video.thumbnail, contentDescription = null, contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -166,21 +179,33 @@ private fun ChannelCard(ch: TvChannel, state: LiveState, onPlay: (VideoItem) -> 
             } else {
                 Text(ch.name, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
             }
-            when (state) {
-                is LiveState.OnAir -> LiveBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
-                LiveState.Searching -> CircularProgressIndicator(
+            when {
+                ch.liveUrl != null -> LiveBadge(Modifier.align(Alignment.TopStart).padding(6.dp), "EN VIVO 24 H")
+                onAir != null -> LiveBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
+                state == LiveState.Searching -> CircularProgressIndicator(
                     color = Color.White, strokeWidth = 2.dp,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(16.dp),
                 )
-                LiveState.Off -> Box(Modifier.fillMaxSize().background(Color(0x99000000)))
+                web == null -> Box(Modifier.fillMaxSize().background(Color(0x99000000)))
+            }
+            // Si hay señal 24 h y además transmisión en YouTube, se puede elegir YouTube
+            if (ch.liveUrl != null && onAir != null) {
+                Text(
+                    "YouTube", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xCC0B0C10)).clickable(onClickLabel = "Ver en YouTube") { onPlay(onAir.video) }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
             }
         }
         Text(ch.name, color = VColors.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp, start = 2.dp))
         Text(
-            when (state) {
-                is LiveState.OnAir -> state.video.title
-                LiveState.Searching -> "Buscando señal…"
-                LiveState.Off -> "Sin transmisión ahora"
+            when {
+                ch.liveUrl != null -> "Señal oficial en su web"
+                onAir != null -> onAir.video.title
+                state == LiveState.Searching -> "Buscando señal…"
+                ch.siteUrl != null -> "No está en YouTube ahora · abrir su web"
+                else -> "Sin transmisión ahora"
             },
             color = VColors.Secondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = 2.dp),
@@ -209,13 +234,13 @@ private fun PanelChannelCard(c: PanelChannel, onClick: () -> Unit) {
 }
 
 @Composable
-private fun LiveBadge(modifier: Modifier) {
+private fun LiveBadge(modifier: Modifier, text: String = "EN VIVO") {
     Row(
         modifier.clip(RoundedCornerShape(6.dp)).background(VColors.Coral).padding(horizontal = 6.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White))
         Spacer(Modifier.width(4.dp))
-        Text("EN VIVO", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }

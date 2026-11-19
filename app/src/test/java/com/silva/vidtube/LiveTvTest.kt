@@ -35,4 +35,13 @@ class LiveTvTest {
         assertEquals(listOf("TV Perú", "Sin logo"), list.map { it.name })
         assertEquals(null, list[1].logo)
     }
+
+    @Test
+    fun canalesConSenalOficial24h() {
+        assertEquals("https://tvgo.americatv.com.pe/", ch("america").liveUrl)
+        assertEquals("https://www.latina.pe/tvenvivo", ch("latina").liveUrl)
+        assertEquals("https://panamericana.pe/tvenvivo/hd", ch("panamericana").liveUrl)
+        // Todas las direcciones son https
+        LiveTv.peru.forEach { c -> listOfNotNull(c.liveUrl, c.siteUrl).forEach { assertTrue(it.startsWith("https://")) } }
+    }
 }

@@ -232,6 +232,7 @@ fun HomeScreen(
     onMore: (chipId: String, title: String) -> Unit,
     onLibrary: () -> Unit = {},
     onMovie: (Long, Boolean) -> Unit = { _, _ -> },
+    onWeb: (String, String) -> Unit = { _, _ -> },
     vm: HomeViewModel = viewModel(),
     moviesVm: MoviesViewModel = viewModel(),
 ) {
@@ -301,7 +302,7 @@ fun HomeScreen(
         }
         // TV abierta: canales en vivo en vez de la lista de videos
         if (vm.selected == "tvabierta") {
-            TvContent(onVideo)
+            TvContent(onVideo, onWeb)
             return@Column
         }
         PullToRefreshBox(
