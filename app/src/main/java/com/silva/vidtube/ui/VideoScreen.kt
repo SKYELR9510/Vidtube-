@@ -160,6 +160,15 @@ fun VideoScreen(
         }
     }
 
+    // «Ver película» pide abrir directo en pantalla completa
+    val wantFull by NowPlaying.wantFullscreen.collectAsState()
+    LaunchedEffect(wantFull) {
+        if (wantFull) {
+            NowPlaying.wantFullscreen.value = false
+            if (!fullscreen) toggleFullscreen()
+        }
+    }
+
     // Ocultar barras del sistema en pantalla completa
     DisposableEffect(fullscreen) {
         val window = activity?.window
@@ -1010,7 +1019,9 @@ private fun DirectLinkDetails(video: VideoItem) {
                 Spacer(Modifier.width(6.dp))
                 Text("EN VIVO", color = VColors.Coral, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
-        } else if (video.channelName.isNotBlank() && video.channelName != video.title) {
+        } else if (video.channelName.isNotBlank() && video.channelName != video.title &&
+            !Regex("^[a-z0-9.-]+\\.[a-z]{2,}$", RegexOption.IGNORE_CASE).matches(video.channelName)
+        ) {
             Text(video.channelName, color = VColors.Secondary, fontSize = 13.sp)
         }
     }

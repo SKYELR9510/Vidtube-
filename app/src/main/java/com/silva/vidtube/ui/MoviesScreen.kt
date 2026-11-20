@@ -280,31 +280,25 @@ fun MovieScreen(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        val first = full?.firstOrNull()
-                        val other = others.firstOrNull()
+                        // Un solo botón: 1º la película completa en YouTube (verificados primero,
+                        // luego otros canales que coinciden), 2º los enlaces del panel; si no hay nada, en gris.
+                        val yt = full?.firstOrNull() ?: others.firstOrNull()
                         val mine = myLinks.firstOrNull()
-                        // Si no está gratis en YouTube, el botón lleva a la plataforma donde sí está
-                        val w = d.watch
-                        val platform = w?.free?.firstOrNull() ?: w?.subscription?.firstOrNull()
-                        val platformUrl = platform?.let { Tmdb.providerUrl(it, d.movie.title, w?.link) }
+                        val label = if (tv) "Ver capítulo" else "Ver película"
                         PillButton(
                             when {
-                                first != null -> if (tv) "Ver capítulo" else "Ver película"
-                                mine != null -> "Ver: " + mine.name
-                                other != null && full != null && platformUrl == null -> if (tv) "Ver capítulo" else "Ver película"
-                                platform != null && platformUrl != null && full != null ->
-                                    (if (w?.free?.isNotEmpty() == true) "Gratis en " else "Ver en ") + platform.name
+                                yt != null || mine != null -> label
                                 full == null -> "Buscando…"
-                                else -> "No disponible gratis"
+                                else -> "No disponible"
                             },
                             Icons.Filled.PlayArrow, primary = true,
-                            enabled = first != null || mine != null || (full != null && (platformUrl != null || other != null)),
+                            enabled = yt != null || mine != null,
                             modifier = Modifier.weight(1f),
                         ) {
-                            if (first != null) onVideo(first)
+                            // Se abre directo en pantalla completa
+                            com.silva.vidtube.player.NowPlaying.wantFullscreen.value = true
+                            if (yt != null) onVideo(yt)
                             else if (mine != null) openUserLink(context, mine, d.movie, onVideo, onWeb, myLinks)
-                            else if (platformUrl != null) openLink(context, platformUrl)
-                            else if (other != null) onVideo(other)
                         }
                         val key = d.trailerKey
                         PillButton("Tráiler", Icons.Outlined.Movie, primary = false, enabled = key != null, modifier = Modifier.weight(1f)) {
@@ -312,7 +306,7 @@ fun MovieScreen(
                         }
                     }
                 }
-                item("mylinks") {
+                if (!com.silva.vidtube.data.PanelLinks.hasBuiltIn()) item("mylinks") {
                     MyLinks(myLinks, onOpen = { l -> openUserLink(context, l, d.movie, onVideo, onWeb, myLinks) },
                         onRemove = { l -> if (!l.fromPanel) com.silva.vidtube.data.UserLinks.remove(linkKey, l) }, onAdd = { addLink = true })
                 }
@@ -353,7 +347,7 @@ fun MovieScreen(
                         }
                     }
                 }
-                item("full_t") { SectionTitle(if (tv) "Capítulos en YouTube" else "En YouTube") }
+                if (tv) item("full_t") { SectionTitle("Capítulos") }
                 if (tv && d.seasons.size > 1) {
                     item("seasons") {
                         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -366,37 +360,25 @@ fun MovieScreen(
                         }
                     }
                 }
-                val f = full
-                when {
-                    f == null -> item("full_loading") {
-                        Text(if (tv) "Buscando capítulos de la temporada $season en YouTube…" else "Buscando la película completa en YouTube…", color = VColors.Secondary, fontSize = 13.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                    }
-                    f.isEmpty() && others.isEmpty() -> item("full_none") {
-                        Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                // Series: capítulos de la temporada elegida (las películas usan solo el botón «Ver película»)
+                if (tv) {
+                    val f = full
+                    val episodes = f.orEmpty() + others
+                    when {
+                        f == null -> item("full_loading") {
+                            Text("Buscando capítulos de la temporada $season…", color = VColors.Secondary, fontSize = 13.sp,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                        }
+                        episodes.isEmpty() -> item("full_none") {
                             Text(
-                                (if (tv) "No encontramos capítulos completos en español de la temporada $season en YouTube"
-                                else "No encontramos esta película completa en español en YouTube") +
-                                    " (se descartan narraciones, reseñas, resúmenes y videos en otros idiomas). " +
-                                    "Mira «Dónde ver» o agrega tu propio enlace en «Tus enlaces».",
+                                "No encontramos capítulos completos en español de la temporada $season.",
                                 color = VColors.Secondary, fontSize = 13.sp,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             )
                         }
-                    }
-                    else -> items(f, key = { "full:" + it.url }) { v ->
-                        VideoCard(v, onClick = { onVideo(v) }, onChannel = {}, reason = (if (tv) "Capítulo completo · " else "Duración completa · ") + v.channelName + (if (v.verified) " ✓ canal verificado" else ""))
-                    }
-                }
-                if (f != null && others.isNotEmpty()) {
-                    item("others_t") {
-                        SectionTitle(
-                            "De otros canales (sin verificar)",
-                            subtitle = "Coinciden en título, duración e idioma; el canal no es oficial: " +
-                                "puede ser la " + (if (tv) "serie" else "película") + " completa o no.",
-                        )
-                    }
-                    items(others, key = { "other:" + it.url }) { v ->
-                        VideoCard(v, onClick = { onVideo(v) }, onChannel = {}, reason = "Sin verificar · " + v.channelName)
+                        else -> items(episodes, key = { "ep:" + it.url }) { v ->
+                            VideoCard(v, onClick = { onVideo(v) }, onChannel = {}, reason = "Capítulo completo")
+                        }
                     }
                 }
                 if (similar.isNotEmpty()) {
@@ -706,7 +688,7 @@ private fun openUserLink(
     all: List<com.silva.vidtube.data.UserLink> = emptyList(),
 ) {
     fun item(url: String) = VideoItem(
-        url = url, title = movie.title, thumbnail = movie.backdrop ?: movie.poster, channelName = link.name,
+        url = url, title = movie.title, thumbnail = movie.backdrop ?: movie.poster, channelName = "",
         channelUrl = null, channelAvatar = null, durationSec = 0, views = -1, uploaded = null, isLive = false,
     )
     when (link.kind) {

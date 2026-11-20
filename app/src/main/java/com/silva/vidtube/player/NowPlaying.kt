@@ -63,6 +63,9 @@ object NowPlaying {
     private var lastInfo: StreamInfo? = null
     private var autoFailures = 0
 
+    /** Pedido de abrir el siguiente video directo en pantalla completa («Ver película»). */
+    val wantFullscreen = MutableStateFlow(false)
+
     /** Enlaces de respaldo de un enlace principal (canales y títulos del panel). */
     val alternates = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
     private val directQueue = ArrayDeque<String>()
