@@ -63,7 +63,7 @@ fun SettingsScreen(onBack: () -> Unit, onDownloads: () -> Unit) {
 
     Column(Modifier.fillMaxSize().background(VColors.Background)) {
         VTopBar(title = "Configuración", onBack = onBack)
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Column(Modifier.readableWidth().fillMaxSize().verticalScroll(rememberScrollState())) {
             Group("Apariencia") {
                 SwitchRow(
                     if (settings.lightMode) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,

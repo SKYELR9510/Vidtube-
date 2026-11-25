@@ -1,6 +1,12 @@
 package com.silva.vidtube.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
@@ -27,23 +33,36 @@ fun FeedList(
     /** Cuántos de los primeros elementos ya se muestran en el encabezado (destacado, tendencias). */
     skip: Int = 0,
 ) {
+    val columns = videoColumns()
     LazyColumn(modifier.fillMaxSize(), state = state) {
         header?.invoke(this)
         val items = paged.items
-        itemsIndexed(items.drop(skip), key = { _, e -> e.key }) { i, entry ->
-            val index = i + skip
-            if (index >= items.size - 4 && paged.canLoadMore) {
-                LaunchedEffect(items.size) { paged.loadMore() }
+        val shown = items.drop(skip)
+        if (columns <= 1) {
+            itemsIndexed(shown, key = { _, e -> e.key }) { i, entry ->
+                val index = i + skip
+                if (index >= items.size - 4 && paged.canLoadMore) {
+                    LaunchedEffect(items.size) { paged.loadMore() }
+                }
+                FeedEntryView(entry, onVideo, onChannel, showChannelAvatar)
             }
-            when (entry) {
-                is FeedEntry.Video -> VideoCard(
-                    entry.video,
-                    onClick = { onVideo(entry.video) },
-                    onChannel = onChannel,
-                    showChannelAvatar = showChannelAvatar,
-                    reason = entry.reason,
-                )
-                is FeedEntry.Channel -> ChannelEntry(entry.channel, onChannel)
+        } else {
+            // Tablet: cuadrícula de videos (los canales ocupan toda la fila)
+            val rows = feedRows(shown, columns)
+            itemsIndexed(rows, key = { _, r -> r.first().key }) { i, row ->
+                if (i >= rows.size - 2 && paged.canLoadMore) {
+                    LaunchedEffect(items.size) { paged.loadMore() }
+                }
+                if (row.size == 1 && row[0] is FeedEntry.Channel) {
+                    FeedEntryView(row[0], onVideo, onChannel, showChannelAvatar)
+                } else {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
+                        row.forEach { e ->
+                            Box(Modifier.weight(1f)) { FeedEntryView(e, onVideo, onChannel, showChannelAvatar) }
+                        }
+                        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
             }
         }
         when {
@@ -55,6 +74,37 @@ fun FeedList(
             paged.loaded && items.isEmpty() -> item("empty") { EmptyView(emptyTitle, emptySubtitle) }
         }
     }
+}
+
+@Composable
+private fun FeedEntryView(entry: FeedEntry, onVideo: (VideoItem) -> Unit, onChannel: (String) -> Unit, showChannelAvatar: Boolean) {
+    when (entry) {
+        is FeedEntry.Video -> VideoCard(
+            entry.video,
+            onClick = { onVideo(entry.video) },
+            onChannel = onChannel,
+            showChannelAvatar = showChannelAvatar,
+            reason = entry.reason,
+        )
+        is FeedEntry.Channel -> ChannelEntry(entry.channel, onChannel)
+    }
+}
+
+/** Agrupa los videos en filas de [columns]; cada canal va en su propia fila. */
+internal fun feedRows(entries: List<FeedEntry>, columns: Int): List<List<FeedEntry>> {
+    val rows = ArrayList<List<FeedEntry>>()
+    var current = ArrayList<FeedEntry>()
+    for (e in entries) {
+        if (e is FeedEntry.Channel) {
+            if (current.isNotEmpty()) { rows += current; current = ArrayList() }
+            rows += listOf(e)
+        } else {
+            current += e
+            if (current.size == columns) { rows += current; current = ArrayList() }
+        }
+    }
+    if (current.isNotEmpty()) rows += current
+    return rows
 }
 
 @Composable

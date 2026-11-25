@@ -216,10 +216,11 @@ fun SearchScreen(
             val rows: List<Pair<String, Boolean>> =
                 if (vm.text.isBlank()) recent.map { it to true }
                 else vm.suggestions.map { it to false }
-            LazyColumn(Modifier.fillMaxSize()) {
+            val catCols = if (videoColumns() > 1) 4 else 2
+            LazyColumn(Modifier.readableWidth().fillMaxSize()) {
                 if (vm.text.isBlank()) {
                     item("cat_title") { SectionTitle("Explorar categorías") }
-                    items(searchCategories.chunked(2), key = { "cat_" + it.first().label }) { row ->
+                    items(searchCategories.chunked(catCols), key = { "cat_" + it.first().label }) { row ->
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
@@ -231,6 +232,7 @@ fun SearchScreen(
                                     else if (cat.chip != null) vm.openCategory(cat.label, cat.chip) else vm.submit(cat.query)
                                 }
                             }
+                            repeat(catCols - row.size) { androidx.compose.foundation.layout.Spacer(Modifier.weight(1f)) }
                         }
                     }
                     if (rows.isNotEmpty()) item("recent_title") { SectionTitle("Búsquedas recientes") }

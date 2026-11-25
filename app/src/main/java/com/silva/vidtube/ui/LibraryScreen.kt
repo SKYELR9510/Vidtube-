@@ -86,7 +86,7 @@ fun LibraryScreen(
         }) {
             TopIcon(Icons.Outlined.Settings, "Configuración", onSettings)
         }
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Column(Modifier.readableWidth(960.dp).fillMaxSize().verticalScroll(rememberScrollState())) {
             Text(
                 "${subs.size} suscripciones · sin anuncios · todo guardado en tu celular",
                 color = VColors.Secondary,
@@ -260,7 +260,7 @@ fun VideoListScreen(
                 },
             )
         } else {
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.readableWidth().fillMaxSize()) {
                 items(list, key = { it.url }) { v ->
                     VideoRow(
                         v,

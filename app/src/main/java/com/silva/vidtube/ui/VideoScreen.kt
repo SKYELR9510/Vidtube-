@@ -139,7 +139,10 @@ fun VideoScreen(
     val activity = context.findActivity()
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var fullscreenRequested by rememberSaveable { mutableStateOf(false) }
-    val fullscreen = fullscreenRequested || isLandscape
+    // En celular girar a horizontal = pantalla completa; en tablet se usa el botón
+    val tablet = isTablet()
+    val fullscreen = fullscreenRequested || (isLandscape && !tablet)
+    val wide = Adaptive.twoPane(LocalConfiguration.current.screenWidthDp)
     val playerState = rememberPlayerUiState()
 
     // Pantalla encendida solo en pantalla completa mientras se reproduce (fuera de eso se apaga sola y ahorra batería)
@@ -153,7 +156,8 @@ fun VideoScreen(
     fun toggleFullscreen() {
         if (fullscreen) {
             fullscreenRequested = false
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            activity?.requestedOrientation =
+                if (tablet) ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         } else {
             fullscreenRequested = true
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -328,6 +332,7 @@ fun VideoScreen(
             )
             .statusBarsPadding()
     ) {
+        val playerBox: @Composable () -> Unit = {
         Box(
             Modifier
                 .fillMaxWidth()
@@ -370,12 +375,53 @@ fun VideoScreen(
             }
         }
 
+        }
+        val details: @Composable () -> Unit = {
         when {
             state.loading -> LoadingView()
             state.error != null -> ErrorView(state.error, onRetry = { NowPlaying.retry(context) })
-            state.info != null -> VideoDetails(state, state.info, onChannel)
+            state.info != null -> VideoDetails(state, state.info, onChannel, showRelated = !wide)
             else -> DirectLinkDetails(state.video)
         }
+        }
+        if (wide) {
+            // Pantalla ancha (tablet horizontal): video y detalles a la izquierda, sugeridos a la derecha
+            Row(Modifier.fillMaxSize()) {
+                Column(Modifier.weight(1f).fillMaxSize()) {
+                    playerBox()
+                    details()
+                }
+                val info = state.info
+                if (info != null && !state.loading) {
+                    RelatedPane(info, onChannel, Modifier.width(400.dp).fillMaxSize())
+                }
+            }
+        } else {
+            playerBox()
+            details()
+        }
+    }
+}
+
+/** Columna de sugeridos junto al video (pantallas anchas). */
+@Composable
+private fun RelatedPane(info: StreamInfo, onChannel: (String) -> Unit, modifier: Modifier) {
+    val context = LocalContext.current
+    val related = remember(info) {
+        info.relatedItems.mapNotNull { it.toEntry() }.filterIsInstance<FeedEntry.Video>().map { it.video }
+    }
+    LazyColumn(modifier) {
+        item("t") {
+            Text(
+                "A continuación",
+                color = VColors.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 14.dp, top = 10.dp, bottom = 8.dp),
+            )
+        }
+        items(related, key = { "side:" + it.url }) { v ->
+            VideoCard(v, onClick = { NowPlaying.open(context, v) }, onChannel = onChannel)
+        }
+        item("bottom") { Spacer(Modifier.navigationBarsPadding().height(16.dp)) }
     }
 }
 
@@ -395,7 +441,7 @@ private fun ErrorOverlay(message: String, onRetry: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (String) -> Unit) {
+private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (String) -> Unit, showRelated: Boolean = true) {
     val context = LocalContext.current
     val video = state.video
     var showDescription by remember { mutableStateOf(false) }
@@ -427,6 +473,7 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
         subscribers = info.uploaderSubscriberCount,
     )
 
+    val cols = videoColumns()
     LazyColumn(Modifier.fillMaxSize()) {
         item("title") {
             Column(
@@ -604,8 +651,22 @@ private fun VideoDetails(state: NowPlaying.State, info: StreamInfo, onChannel: (
                 )
             }
         }
-        items(related, key = { "rel:" + it.url }) { v ->
-            VideoCard(v, onClick = { NowPlaying.open(context, v) }, onChannel = onChannel)
+        if (showRelated) {
+            if (cols <= 1) {
+                items(related, key = { "rel:" + it.url }) { v ->
+                    VideoCard(v, onClick = { NowPlaying.open(context, v) }, onChannel = onChannel)
+                }
+            } else {
+                // Tablet vertical: sugeridos en cuadrícula
+                items(related.chunked(cols), key = { "rel:" + it.first().url }) { row ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
+                        row.forEach { v ->
+                            Box(Modifier.weight(1f)) { VideoCard(v, onClick = { NowPlaying.open(context, v) }, onChannel = onChannel) }
+                        }
+                        repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
         }
         item("bottom") { Spacer(Modifier.navigationBarsPadding().height(16.dp)) }
     }

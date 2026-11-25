@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -360,7 +362,14 @@ private fun ShortPage(
     onDownload: () -> Unit,
 ) {
     val context = LocalContext.current
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    // En tablet u horizontal el short no se estira: se muestra vertical (9:16) y centrado
+    val conf = androidx.compose.ui.platform.LocalConfiguration.current
+    val wideScreen = conf.screenWidthDp > conf.screenHeightDp * 0.75f
+    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+    Box(
+        (if (wideScreen) Modifier.fillMaxHeight().aspectRatio(9f / 16f, matchHeightConstraintsFirst = true) else Modifier.fillMaxSize())
+            .background(Color.Black)
+    ) {
         // Miniatura de fondo mientras carga (y en las páginas vecinas)
         AsyncImage(
             model = item.thumbnail,
@@ -475,6 +484,7 @@ private fun ShortPage(
         if (isCurrent) {
             ShortProgressBar(Modifier.align(Alignment.BottomCenter), active = ready)
         }
+    }
     }
 }
 

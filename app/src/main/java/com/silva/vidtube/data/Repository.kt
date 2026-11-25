@@ -54,11 +54,54 @@ object Repository {
 
     // ---------- Inicio / tendencias ----------
     suspend fun kiosk(kioskId: String): PagedResult = withContext(Dispatchers.IO) {
-        val extractor = yt.kioskList.getExtractorById(kioskId, null)
-        extractor.fetchPage()
-        val info = KioskInfo.getInfo(extractor)
-        PagedResult(info.relatedItems.mapNotNull { it.toEntry() }, kioskNext(info.url, info.nextPage))
+        val fromKiosk = runCatching {
+            val extractor = yt.kioskList.getExtractorById(kioskId, null)
+            extractor.fetchPage()
+            val info = KioskInfo.getInfo(extractor)
+            PagedResult(info.relatedItems.mapNotNull { it.toEntry() }, kioskNext(info.url, info.nextPage))
+        }
+        val ok = fromKiosk.getOrNull()
+        if (ok != null && ok.items.size >= 6) return@withContext ok
+        // YouTube retiró su página de Tendencias: esas listas llegan vacías o fallan.
+        // En ese caso armamos la categoría con búsquedas de lo más reciente.
+        val queries = kioskFallback[kioskId] ?: return@withContext ok ?: throw fromKiosk.exceptionOrNull()!!
+        val lists = queries.map { q ->
+            async {
+                runCatching {
+                    if (kioskId == "live") liveSearch(q.first) else freshSearch(q.first, maxAgeDays = q.second).items
+                }.getOrDefault(emptyList())
+            }
+        }.map { it.await() }
+        val mixed = ArrayList<FeedEntry>()
+        val queues = lists.map { ArrayDeque(it) }
+        while (queues.any { it.isNotEmpty() }) queues.forEach { qu -> qu.removeFirstOrNull()?.let { mixed += it } }
+        val out = mixed.filter { it !is FeedEntry.Channel }.distinctBy { it.key }
+        if (out.isEmpty()) return@withContext ok ?: throw (fromKiosk.exceptionOrNull() ?: Exception("Sin resultados"))
+        // Al llegar al final se sigue con la búsqueda principal
+        val more = runCatching { search(queries.first().first).loadMore }.getOrNull()
+        PagedResult(out, more)
     }
+
+    /** Transmisiones que están en vivo ahora mismo. */
+    private fun liveSearch(query: String): List<FeedEntry> {
+        val handler = yt.searchQHFactory.fromQuery(query, listOf(YoutubeSearchQueryHandlerFactory.VIDEOS), "")
+        val info = SearchInfo.getInfo(yt, handler)
+        return info.relatedItems.filterIsInstance<StreamInfoItem>().map { VideoItem.from(it) }
+            .filter { it.isLive }.map { FeedEntry.Video(it) }
+    }
+
+    /** Búsquedas que reemplazan a cada lista de Tendencias (texto, antigüedad máxima en días). */
+    private val kioskFallback = mapOf(
+        "trending_music" to listOf(
+            "música nueva video oficial" to 60L,
+            "estrenos musicales latino" to 60L,
+            "top canciones del momento" to 120L,
+        ),
+        "trending_gaming" to listOf("gameplay nuevo videojuego" to 30L, "videojuegos novedades" to 30L),
+        "trending_podcasts_episodes" to listOf("podcast episodio completo" to 30L, "podcast entrevista" to 30L),
+        "trending_movies_and_shows" to listOf("tráiler oficial español" to 30L),
+        "live" to listOf("en vivo ahora" to 2L, "transmisión en vivo" to 2L),
+    )
 
     private fun kioskNext(url: String, page: Page?): (suspend () -> PagedResult)? {
         if (page == null || !Page.isValid(page)) return null

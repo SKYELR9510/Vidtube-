@@ -76,7 +76,7 @@ fun DownloadsScreen(onBack: () -> Unit) {
             )
             return@Column
         }
-        LazyColumn(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.readableWidth().fillMaxSize()) {
             items(tasks, key = { it.id }) { t ->
                 Row(
                     Modifier

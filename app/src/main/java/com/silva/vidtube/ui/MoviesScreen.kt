@@ -273,7 +273,7 @@ fun MovieScreen(
             d == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = VColors.Coral, strokeWidth = 3.dp)
             }
-            else -> LazyColumn(Modifier.fillMaxSize()) {
+            else -> LazyColumn(Modifier.readableWidth(960.dp).fillMaxSize()) {
                 item("hero") { MovieHero(d) }
                 item("actions") {
                     Row(

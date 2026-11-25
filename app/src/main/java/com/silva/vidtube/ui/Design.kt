@@ -135,7 +135,8 @@ fun VBottomBar(current: String?, onSelect: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().background(VColors.NavBar)) {
         HorizontalDivider(color = VColors.Divider, thickness = 0.5.dp)
         Row(
-            Modifier.fillMaxWidth().navigationBarsPadding().height(62.dp),
+            // En tablet las pestañas no se separan de extremo a extremo
+            Modifier.readableWidth(640.dp).navigationBarsPadding().height(62.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             navTabs.forEach { tab ->
