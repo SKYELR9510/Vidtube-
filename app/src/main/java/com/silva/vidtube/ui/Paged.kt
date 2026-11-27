@@ -15,6 +15,8 @@ import java.io.IOException
 /** Lista con carga infinita (scroll) y recarga. */
 class Paged(
     private val scope: CoroutineScope,
+    /** Si se indica, la lista se guarda y se muestra al instante la próxima vez que se abra. */
+    private val cacheKey: String? = null,
     private val first: suspend () -> PagedResult,
 ) {
     var items by mutableStateOf<List<FeedEntry>>(emptyList())
@@ -51,6 +53,14 @@ class Paged(
 
     private fun load() {
         job?.cancel()
+        // Primera vez: mostramos lo guardado y actualizamos encima (con el indicador de recarga)
+        if (items.isEmpty() && cacheKey != null) {
+            com.silva.vidtube.data.FeedCache.load(cacheKey)?.let {
+                items = it
+                loaded = true
+                refreshing = true
+            }
+        }
         loading = true
         error = null
         job = scope.launch {
@@ -59,10 +69,12 @@ class Paged(
                 items = r.items.distinctBy { it.key }
                 next = r.loadMore
                 loaded = true
+                cacheKey?.let { com.silva.vidtube.data.FeedCache.save(it, items) }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e("Vidtube", "Error cargando lista", e)
-                error = friendly(e)
+                // Si ya se ve la lista guardada, no la tapamos con el error
+                if (items.isEmpty()) error = friendly(e)
             } finally {
                 loading = false
                 refreshing = false

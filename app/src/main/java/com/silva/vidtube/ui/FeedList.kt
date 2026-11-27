@@ -34,6 +34,12 @@ fun FeedList(
     skip: Int = 0,
 ) {
     val columns = videoColumns()
+    // Adelantamos la información de los primeros videos: al tocarlos empiezan casi al instante
+    val firstVideos = paged.items.asSequence().filterIsInstance<FeedEntry.Video>().take(2).map { it.video.url }.toList()
+    LaunchedEffect(firstVideos) {
+        kotlinx.coroutines.delay(800)
+        firstVideos.forEach { com.silva.vidtube.data.Repository.warm(it) }
+    }
     LazyColumn(modifier.fillMaxSize(), state = state) {
         header?.invoke(this)
         val items = paged.items

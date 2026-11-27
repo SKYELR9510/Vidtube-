@@ -53,8 +53,11 @@ object Repository {
     val yt: StreamingService get() = ServiceList.YouTube
 
     // ---------- Inicio / tendencias ----------
+    /** Listas de Tendencias que YouTube ya no entrega: no se vuelven a pedir en esta sesión. */
+    private val deadKiosks = java.util.Collections.synchronizedSet(HashSet<String>())
+
     suspend fun kiosk(kioskId: String): PagedResult = withContext(Dispatchers.IO) {
-        val fromKiosk = runCatching {
+        val fromKiosk = if (kioskId in deadKiosks && kioskFallback.containsKey(kioskId)) Result.success(null) else runCatching {
             val extractor = yt.kioskList.getExtractorById(kioskId, null)
             extractor.fetchPage()
             val info = KioskInfo.getInfo(extractor)
@@ -62,6 +65,7 @@ object Repository {
         }
         val ok = fromKiosk.getOrNull()
         if (ok != null && ok.items.size >= 6) return@withContext ok
+        deadKiosks += kioskId
         // YouTube retiró su página de Tendencias: esas listas llegan vacías o fallan.
         // En ese caso armamos la categoría con búsquedas de lo más reciente.
         val queries = kioskFallback[kioskId] ?: return@withContext ok ?: throw fromKiosk.exceptionOrNull()!!
@@ -77,8 +81,8 @@ object Repository {
         while (queues.any { it.isNotEmpty() }) queues.forEach { qu -> qu.removeFirstOrNull()?.let { mixed += it } }
         val out = mixed.filter { it !is FeedEntry.Channel }.distinctBy { it.key }
         if (out.isEmpty()) return@withContext ok ?: throw (fromKiosk.exceptionOrNull() ?: Exception("Sin resultados"))
-        // Al llegar al final se sigue con la búsqueda principal
-        val more = runCatching { search(queries.first().first).loadMore }.getOrNull()
+        // Al llegar al final se sigue con la búsqueda principal (solo si el usuario baja tanto)
+        val more: suspend () -> PagedResult = { search(queries.first().first) }
         PagedResult(out, more)
     }
 
@@ -322,7 +326,32 @@ object Repository {
     }
 
     // ---------- Video ----------
-    suspend fun stream(url: String): StreamInfo = withContext(Dispatchers.IO) {
+    /** Información de videos ya consultados (unos minutos): abrir de nuevo un video es inmediato. */
+    private val streamCache = object : LinkedHashMap<String, Pair<Long, StreamInfo>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, StreamInfo>>?) = size > 12
+    }
+    private const val STREAM_TTL_MS = 20 * 60_000L
+
+    /** Olvida la información guardada de un video (por ejemplo, si falló al reproducir). */
+    fun forget(url: String) = synchronized(streamCache) { streamCache.remove(url) }
+
+    /** Carga por adelantado la información de un video (sin esperar el resultado). */
+    suspend fun warm(url: String) {
+        if (synchronized(streamCache) { streamCache[url] } != null) return
+        runCatching { stream(url) }
+    }
+
+    suspend fun stream(url: String, fresh: Boolean = false): StreamInfo = withContext(Dispatchers.IO) {
+        if (!fresh) {
+            val hit = synchronized(streamCache) { streamCache[url] }
+            if (hit != null && System.currentTimeMillis() - hit.first < STREAM_TTL_MS) return@withContext hit.second
+        }
+        loadStream(url).also { info ->
+            synchronized(streamCache) { streamCache[url] = System.currentTimeMillis() to info }
+        }
+    }
+
+    private suspend fun loadStream(url: String): StreamInfo = withContext(Dispatchers.IO) {
         try {
             StreamInfo.getInfo(yt, url)
         } catch (e: Exception) {
@@ -432,14 +461,29 @@ object Repository {
 
     // ---------- Suscripciones ----------
     /** Últimos videos de todos los canales suscritos, del más nuevo al más antiguo. */
-    suspend fun subscriptionFeed(channels: List<ChannelItem>): List<VideoItem> =
+    /** Novedades de suscripciones ya consultadas: se reutilizan unos minutos para no esperar cada vez. */
+    @Volatile private var subsCache: Triple<Long, Set<String>, List<VideoItem>>? = null
+    private const val SUBS_TTL_MS = 15 * 60_000L
+
+    /** Al recargar a mano se vuelven a pedir las novedades. */
+    fun clearSubscriptionCache() { subsCache = null }
+
+    suspend fun subscriptionFeed(channels: List<ChannelItem>, fresh: Boolean = false): List<VideoItem> {
+        val key = channels.map { it.url }.toSet()
+        val c = subsCache
+        if (!fresh && c != null && c.second == key && System.currentTimeMillis() - c.first < SUBS_TTL_MS) return c.third
+        return loadSubscriptionFeed(channels).also { subsCache = Triple(System.currentTimeMillis(), key, it) }
+    }
+
+    private suspend fun loadSubscriptionFeed(channels: List<ChannelItem>): List<VideoItem> =
         withContext(Dispatchers.IO) {
-            val limit = Semaphore(6)
+            val limit = Semaphore(10)
             coroutineScope {
                 channels.map { ch ->
                     async {
                         limit.withPermit {
-                            runCatching {
+                            // Un canal lento no detiene a los demás
+                            kotlinx.coroutines.withTimeoutOrNull(5_000) { runCatching {
                                 FeedInfo.getInfo(yt, ch.url).relatedItems.map { item: StreamInfoItem ->
                                     val sortKey = item.uploadDate?.offsetDateTime()?.toEpochSecond() ?: 0L
                                     sortKey to VideoItem.from(item).copy(
@@ -448,7 +492,7 @@ object Repository {
                                         channelAvatar = ch.avatar,
                                     )
                                 }
-                            }.getOrDefault(emptyList())
+                            }.getOrNull() }.orEmpty()
                         }
                     }
                 }.awaitAll()

@@ -76,6 +76,7 @@ import com.silva.vidtube.data.Repository
 import com.silva.vidtube.data.VideoItem
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class HomeChip(val id: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector? = null)
 
@@ -165,7 +166,9 @@ class HomeViewModel : ViewModel() {
     private val lists = HashMap<String, Paged>()
 
     fun list(id: String): Paged = lists.getOrPut(id) {
-        Paged(viewModelScope) { if (id == "todo") loadMix() else loadChip(id) }
+        Paged(viewModelScope, cacheKey = if (id == "tvabierta") null else "home:$id") {
+            if (id == "todo") loadMix() else loadChip(id)
+        }
     }
 
     /**
@@ -173,17 +176,25 @@ class HomeViewModel : ViewModel() {
      * suscripciones + algunas tendencias para descubrir cosas nuevas.
      */
     private suspend fun loadMix(): PagedResult = coroutineScope {
+        // Cada parte tiene un tiempo máximo: si algo tarda, se muestra lo que ya llegó
         val subsJob = async {
-            runCatching { Repository.subscriptionFeed(Library.subscriptions.value.take(40)) }
-                .getOrDefault(emptyList())
+            withTimeoutOrNull(7_000) {
+                runCatching { Repository.subscriptionFeed(Library.subscriptions.value.take(40)) }.getOrNull()
+            }.orEmpty()
         }
-        val musicJob = async { runCatching { Repository.kiosk("trending_music") } }
-        val gamingJob = async { runCatching { Repository.kiosk("trending_gaming") } }
+        val musicJob = async {
+            withTimeoutOrNull(7_000) { runCatching { Repository.kiosk("trending_music") } }
+                ?: Result.failure(Exception("Sin respuesta"))
+        }
+        val gamingJob = async {
+            withTimeoutOrNull(7_000) { runCatching { Repository.kiosk("trending_gaming") } }
+                ?: Result.failure(Exception("Sin respuesta"))
+        }
 
         // Lo más reciente de tus 2 temas principales (últimos ~4 meses)
         val freshJobs = Library.interests(2).map { interest ->
             async {
-                runCatching { Repository.freshSearch(interest.query, maxAgeDays = 120).items }.getOrDefault(emptyList())
+                (withTimeoutOrNull(7_000) { runCatching { Repository.freshSearch(interest.query, maxAgeDays = 120).items }.getOrNull() }).orEmpty()
                     .map { e -> if (e is FeedEntry.Video) e.copy(reason = "Porque te interesa «${interest.label}»") else e }
             }
         }
@@ -311,7 +322,7 @@ fun HomeScreen(
         }
         PullToRefreshBox(
             isRefreshing = paged.refreshing,
-            onRefresh = { paged.refresh(); if (moviesChip || seriesChip) moviesVm.load(tv = seriesChip, force = true) },
+            onRefresh = { com.silva.vidtube.data.Repository.clearSubscriptionCache(); paged.refresh(); if (moviesChip || seriesChip) moviesVm.load(tv = seriesChip, force = true) },
             modifier = Modifier.fillMaxSize(),
         ) {
             key(vm.selected) {

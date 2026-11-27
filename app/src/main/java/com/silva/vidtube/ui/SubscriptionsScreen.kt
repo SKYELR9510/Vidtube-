@@ -39,7 +39,7 @@ import com.silva.vidtube.data.VideoItem
 
 class SubscriptionsViewModel : ViewModel() {
     var lastCount = -1
-    val feed = Paged(viewModelScope) {
+    val feed = Paged(viewModelScope, cacheKey = "subs") {
         val videos = Repository.subscriptionFeed(Library.subscriptions.value)
         PagedResult(videos.map { FeedEntry.Video(it) }, null)
     }
@@ -100,7 +100,7 @@ fun SubscriptionsScreen(
         HorizontalDivider(color = VColors.Divider)
         PullToRefreshBox(
             isRefreshing = vm.feed.refreshing,
-            onRefresh = { vm.feed.refresh() },
+            onRefresh = { Repository.clearSubscriptionCache(); vm.feed.refresh() },
             modifier = Modifier.fillMaxSize(),
         ) {
             FeedList(

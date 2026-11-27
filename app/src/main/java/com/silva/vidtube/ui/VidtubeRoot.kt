@@ -63,7 +63,7 @@ fun VidtubeRoot(isInPip: Boolean) {
     var showSplash by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(!splashShown) }
     LaunchedEffect(Unit) {
         if (showSplash) {
-            kotlinx.coroutines.delay(1400)
+            kotlinx.coroutines.delay(600)
             splashShown = true
             showSplash = false
         }

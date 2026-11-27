@@ -316,7 +316,7 @@ object NowPlaying {
                     if (!refreshed) {
                         refreshed = true
                         val url = _state.value?.video?.url
-                        val fresh = url?.let { u -> runCatching { Repository.stream(u) }.getOrNull() }
+                        val fresh = url?.let { u -> runCatching { Repository.stream(u, fresh = true) }.getOrNull() }
                         if (fresh != null && _state.value?.info === info) {
                             Log.w("Vidtube", "Video atascado (${PlayerHolder.lastLoadError}); pido enlaces nuevos")
                             val at = p.currentPosition
@@ -396,6 +396,7 @@ object NowPlaying {
 
     fun retry(context: Context) {
         val video = _state.value?.video ?: return
+        Repository.forget(video.url)
         _state.value = null
         open(context, video)
     }

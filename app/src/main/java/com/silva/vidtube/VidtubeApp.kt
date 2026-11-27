@@ -34,6 +34,7 @@ class VidtubeApp : Application() {
         RxJavaPlugins.setErrorHandler { Log.w("Vidtube", "Error RxJava no entregado", it) }
 
         Library.init(this)
+        com.silva.vidtube.data.FeedCache.init(this)
         com.silva.vidtube.data.Tmdb.init(this)
         com.silva.vidtube.data.UserLinks.init(this)
         com.silva.vidtube.data.PanelLinks.init(this)
